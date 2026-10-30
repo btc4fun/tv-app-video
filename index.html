@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video</title>
+<!-- la libreria di Home TV, per prima: tasti del telecomando e del telefono, memoria, permesso per le chiavette -->
+<script src="/tv-sito/tv-app.js"></script>
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+  <!-- lo sfondo: due strati che si danno il cambio (la copertina sfocata della voce scelta, o il fanart nitido della scheda) -->
+  <div id="sfondo"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><div id="sfondo-velo"></div></div>
+
+  <!-- inizio: il film da riprendere in grande, Continua a guardare, chiavette e dischi -->
+  <div id="schermo-inizio" class="schermo">
+    <div class="testata"><div class="marchio">Video</div><div class="ora" id="ora"></div></div>
+    <div id="inizio-corpo" class="corpo">
+      <section id="eroe" hidden>
+        <div id="eroe-logo" class="logo"></div>
+        <div id="eroe-meta" class="meta"></div>
+        <p id="eroe-trama" class="trama"></p>
+        <div id="eroe-pulsanti" class="pulsanti"></div>
+      </section>
+      <section class="sezione" id="sez-continua" hidden><h2>Continua a guardare</h2><div class="fila" id="fila-continua"></div></section>
+      <section class="sezione" id="sez-dischi" hidden><h2>Chiavette e dischi</h2><div class="fila" id="fila-dischi"></div></section>
+      <section id="vuoto" hidden>
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 4h12v8h4v26a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V12h4zm4 4v4h4V8zm-6 8v22a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V16z"/></svg>
+        <h2 id="vuoto-titolo">Attacca una chiavetta o un disco USB</h2>
+        <p id="vuoto-testo">Appena il TV lo vede, i tuoi video compaiono qui.</p>
+        <div class="pulsante" id="vuoto-riprova" data-tv>Controlla di nuovo</div>
+      </section>
+    </div>
+  </div>
+
+  <!-- una cartella: le copertine in griglia, in alto la voce scelta -->
+  <div id="schermo-libreria" class="schermo" hidden>
+    <div id="lib-testa"><div id="briciole"></div><div id="lib-conta"></div></div>
+    <div id="lib-scelto">
+      <h1 id="ls-titolo"></h1>
+      <div id="ls-meta" class="meta"></div>
+      <p id="ls-trama" class="trama"></p>
+    </div>
+    <div id="griglia"><div id="griglia-dentro"></div></div>
+    <div id="vuoto-cartella" hidden>Qui non ci sono video.</div>
+  </div>
+
+  <!-- la scheda di un film, di una serie o di una stagione -->
+  <div id="schermo-scheda" class="schermo" hidden>
+    <div id="scheda-corpo" class="corpo">
+      <section id="sc-sopra">
+        <div id="sc-sopratitolo"></div>
+        <div id="sc-logo" class="logo"></div>
+        <div id="sc-meta" class="meta"></div>
+        <div id="sc-badge"></div>
+        <p id="sc-slogan"></p>
+        <p id="sc-trama" class="trama"></p>
+        <div id="sc-pulsanti" class="pulsanti"></div>
+        <div id="sc-righe"></div>
+        <div id="sc-avviso" hidden></div>
+      </section>
+      <section class="sezione" id="sez-stagioni" hidden><h2>Stagioni</h2><div class="fila" id="fila-stagioni"></div></section>
+      <section class="sezione" id="sez-puntate" hidden><h2 id="puntate-titolo">Puntate</h2><div class="fila" id="fila-puntate"></div></section>
+      <section class="sezione" id="sez-cast" hidden><h2>Cast</h2><div class="fila" id="fila-cast"></div></section>
+    </div>
+  </div>
+
+  <!-- il lettore -->
+  <div id="schermo-lettore" class="schermo" hidden>
+    <video id="video" preload="auto"></video>
+    <canvas id="pgs" width="1920" height="1080" hidden></canvas>
+    <div id="sottotitoli"></div>
+    <div id="osd">
+      <div class="su"></div><div class="giu"></div>
+      <div id="osd-titolo"></div>
+      <div id="osd-badge"></div>
+      <div id="osd-aiuto">OK pausa &middot; &#9664; &#9654; 10 s &middot; Gi&ugrave; audio e sottotitoli</div>
+      <div id="osd-chip"></div>
+      <div id="avviso-lettore" hidden></div>
+      <div id="osd-barra"><div id="osd-car"></div><div id="osd-fatto"></div></div>
+      <div id="osd-testa"></div>
+      <div id="osd-meta" hidden></div>
+      <div id="osd-ora">0:00</div>
+      <div id="osd-resta"></div>
+      <div id="osd-centro"></div>
+    </div>
+    <div id="salta" hidden></div>
+    <div id="pannello" hidden></div>
+    <div id="attesa" hidden></div>
+  </div>
+
+  <div id="fermo" hidden><h2 id="fermo-titolo"></h2><p id="fermo-testo"></p><div id="fermo-pulsanti"></div></div>
+  <div id="messaggio"></div>
+
+  <script src="pgs.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

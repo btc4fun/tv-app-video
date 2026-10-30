@@ -1,0 +1,20 @@
+{
+  "formato": 1,
+  "nome": "Video",
+  "app": [
+    {
+      "id": "video",
+      "nome": "Video",
+      "descrizione": "I film e le serie delle chiavette e dei dischi USB attaccati al TV, anche 4K HDR. Sceglie da sola l'audio che il TV legge, disegna i sottotitoli (anche quelli dei Blu-ray) e riprende da dove eri.",
+      "icona": "icona.png",
+      "copertina": "copertina.png",
+      "versione": "1.0.0",
+      "novita": "La prima versione.",
+      "categoria": "film",
+      "url": "./",
+      "autore": "Home TV",
+      "permessi": ["video"],
+      "evidenza": true
+    }
+  ]
+}
