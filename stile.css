@@ -244,5 +244,66 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #06070a; col
 #messaggio.on { opacity: 1; }
 #fermo { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; background: rgba(7, 8, 11, .92); text-align: center; }
 #fermo h2 { margin: 30vh 0 2vh; font-size: 4vh; }
-#fermo p { margin: 0 auto 4vh; max-width: 64vw; font-size: 2.5vh; line-height: 1.5; color: rgba(244, 245, 247, .7); }
+#fermo p { margin: 0 auto 4vh; max-width: 64vw; font-size: 2.5vh; line-height: 1.5; color: rgba(244, 245, 247, .7); white-space: pre-line; }
 #fermo .pulsante { margin: 0 1vh; }
+
+/* ---------- Jellyfin: le file dell'inizio, le carte a poster, generi, librerie, altro */
+#trailer { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; object-fit: cover; opacity: 0; transition: opacity 1.2s ease; }
+#trailer.on { opacity: 1; }
+.carta.poster { width: 11.4vw; }
+.carta.poster .quadro { width: 11.4vw; height: 17.1vw; border-radius: 1.2vh; }
+.carta.poster .finta .ft { font-size: 2.2vh; right: 9%; }
+.carta.poster .nome { font-size: 2vh; }
+.carta.poster .sotto { font-size: 1.7vh; }
+.carta.genere { width: 16vw; }
+.carta.genere .quadro { width: 16vw; height: 9vw; }
+.carta.genere .gn { position: absolute; left: 7%; right: 7%; bottom: 10%; font-size: 2.6vh; font-weight: 800; line-height: 1.15;
+  text-shadow: 0 .3vh 1.2vh rgba(0, 0, 0, .45); white-space: normal; }
+.carta.altro .quadro { background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 .2vh rgba(255, 255, 255, .1); }
+.carta.altro.sel .quadro { box-shadow: 0 0 0 .5vh #f4f5f7, 0 2vh 5vh rgba(0, 0, 0, .55); }
+.carta.altro svg { position: absolute; left: 50%; top: 42%; width: 8vh; height: 8vh; margin: -4vh 0 0 -4vh; fill: rgba(244, 245, 247, .85); }
+.carta.altro .stato { position: absolute; left: 0; right: 0; bottom: 9%; text-align: center; font-size: 1.9vh; font-weight: 700; color: rgba(244, 245, 247, .7); }
+.carta .fonte { position: absolute; right: 1.2vh; bottom: 1.6vh; padding: .3vh .9vh; border-radius: .6vh; background: rgba(0, 0, 0, .62);
+  font-size: 1.5vh; font-weight: 700; letter-spacing: .04em; color: rgba(244, 245, 247, .8); }
+.badge.conv { background: rgba(59, 130, 246, .22); color: #bfdbfe; }
+.pulsante.acceso svg { fill: #19d3b7; }
+.pulsante.sel.acceso svg { fill: #0b8f7b; }
+
+/* la barra di una libreria di Jellyfin: ordine e filtri (Su dalla prima riga) */
+#lib-barra { position: absolute; right: 5vw; top: 31.5vh; white-space: nowrap; font-size: 0; z-index: 2; }
+#lib-barra .chip { margin: 0 0 0 1.2vh; padding: 1vh 2.2vh; font-size: 2vh; }
+
+/* cerca */
+#cerca-corpo { padding-top: 13vh; }
+#cerca-sopra { margin: 0 0 4vh 5vw; }
+#cerca-sopra .pulsanti { margin-top: 0; }
+#cerca-pulsanti .pulsante:first-child { min-width: 34vw; text-align: left; }
+#cerca-stato { margin: 2.4vh 0 0; font-size: 2.3vh; color: rgba(244, 245, 247, .62); }
+
+/* collegare Jellyfin */
+#collega-corpo { padding-top: 16vh; }
+#collega-sopra { margin: 0 0 5vh 5vw; max-width: 70vw; }
+#collega-titolo { font-size: 5.4vh; font-weight: 800; letter-spacing: -.015em; }
+#collega-testo { margin: 2vh 0 0; max-width: 60vw; font-size: 2.5vh; line-height: 1.5; color: rgba(244, 245, 247, .8); white-space: pre-line; }
+#qc-codice { margin-top: 3.4vh; font-size: 13vh; font-weight: 800; letter-spacing: .14em; line-height: 1; color: #f4f5f7;
+  text-shadow: 0 0 4vh rgba(25, 211, 183, .55), 0 0 1vh rgba(59, 130, 246, .5); }
+
+/* l'anteprima sopra la barra del tempo (le tessere di Jellyfin) */
+#osd-anteprima { position: absolute; bottom: 15.5vh; left: 5vw; width: 24vh; height: 13.5vh; margin-left: -12vh; border-radius: 1.2vh;
+  overflow: hidden; background: #000; box-shadow: 0 0 0 .3vh rgba(255, 255, 255, .85), 0 1.6vh 4vh rgba(0, 0, 0, .6); }
+#osd-tessera { position: absolute; left: 0; top: 0; background-repeat: no-repeat; transform-origin: 0 0; }
+#osd-anteprima:not([hidden]) ~ #osd-meta { bottom: 31vh; }
+
+/* nel pannello: i capitoli con l'immagine */
+.v.con-img { padding-left: 15vh; min-height: 6.3vh; }
+.v .mini { position: absolute; left: .8vh; top: .8vh; width: 12.4vh; height: 7vh; border-radius: .8vh; overflow: hidden; background: #1b1e25; }
+.v .mini img { width: 100%; height: 100%; opacity: 0; transition: opacity .3s ease; }
+.v .mini img.on { opacity: 1; }
+
+/* la pagina che scorre: marchio e ora spariscono, e in alto una sfumatura (le file non passano sotto le scritte) */
+.testata { transition: opacity .3s ease; }
+.scorso .testata { opacity: 0; }
+#schermo-inizio:after, #schermo-scheda:after, #schermo-cerca:after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 9vh;
+  background: linear-gradient(rgba(6, 7, 10, .92), rgba(6, 7, 10, 0)); opacity: 0; transition: opacity .3s ease; pointer-events: none; z-index: 1; }
+#schermo-inizio.scorso:after, #schermo-scheda.scorso:after, #schermo-cerca.scorso:after { opacity: 1; }
+.jf-giu .trama { margin-top: 0; }

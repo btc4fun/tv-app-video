@@ -47,7 +47,12 @@
     spunta: 'M9 25l10 10 20-22',
     ripeti: 'M24 8a16 16 0 1 1-15.6 19.6l3.9-.9A12 12 0 1 0 24 12v6l-9-8 9-8z',
     audio: 'M6 18h8l10-8v28l-10-8H6zm24-2a10 10 0 0 1 0 16l-2-3a6 6 0 0 0 0-10zm4-6a18 18 0 0 1 0 28l-2-3a14 14 0 0 0 0-22z',
-    testo: 'M4 10h40v28H4zm4 4v20h32V14zm4 12h10v4H12zm14 0h10v4H26zm-14-6h24v4H12z'
+    testo: 'M4 10h40v28H4zm4 4v20h32V14zm4 12h10v4H12zm14 0h10v4H26zm-14-6h24v4H12z',
+    cerca: 'M20 6a14 14 0 0 1 11.1 22.5l10.7 10.7-2.8 2.8-10.7-10.7A14 14 0 1 1 20 6zm0 4a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
+    jellyfin: 'M24 6c-5 0-21 29-18.6 33.6S42.6 44.2 42.6 39.6 29 6 24 6zm0 9c3 0 11 17.5 9.8 20S15.4 37.5 14.2 35 21 15 24 15zm0 7c-1.6 0-5.3 9.6-4.6 11s8.6 1.4 9.2 0S25.6 22 24 22z',
+    cuore: 'M24 42l-3-2.7C10.4 29.8 4 24 4 16.8 4 11 8.5 6.5 14.2 6.5c3.3 0 6.5 1.6 8.6 4 .5.6 1.9.6 2.4 0 2.1-2.4 5.3-4 8.6-4C39.5 6.5 44 11 44 16.8c0 7.2-6.4 13-17 22.5z',
+    trailer: 'M6 10h36v28H6zm14 7v14l11-7z',
+    ingranaggio: 'M27 4l1.2 5.1a15 15 0 0 1 3.6 2.1l5-1.6 3 5.2-3.8 3.6a15 15 0 0 1 0 4.2l3.8 3.6-3 5.2-5-1.6a15 15 0 0 1-3.6 2.1L27 44h-6l-1.2-5.1a15 15 0 0 1-3.6-2.1l-5 1.6-3-5.2 3.8-3.6a15 15 0 0 1 0-4.2L8.2 21.8l3-5.2 5 1.6a15 15 0 0 1 3.6-2.1L21 4zm-3 13a7 7 0 1 0 0 14 7 7 0 0 0 0-14z'
   };
   function due(n) { return (n < 10 ? '0' : '') + n; }
   function tempo(s) {
@@ -144,17 +149,17 @@
     return l.join('&');
   }
   // una domanda al servizio col gettone; se il gettone non vale piu' (servizio ripartito) se ne chiede uno nuovo, una volta
-  function chiedi(via, param, corpo, riprovato) {
+  function chiedi(via, param, corpo, riprovato, metodo) {
     return (serv.gettone ? Promise.resolve() : prendiPermesso()).then(function () {
       return new Promise(function (ok, ko) {
-        var x = new XMLHttpRequest();
-        x.open(corpo ? 'POST' : 'GET', serv.base + '/api/video/g/' + serv.gettone + '/' + via + '?' + query(param || {}), true);
+        var x = new XMLHttpRequest(), q = query(param || {});
+        x.open(metodo || (corpo ? 'POST' : 'GET'), serv.base + '/api/video/g/' + serv.gettone + '/' + via + (q ? '?' + q : ''), true);
         x.timeout = 20000;
         x.onload = function () {
           var r = null;
           try { r = JSON.parse(x.responseText); } catch (e) {}
-          if (x.status === 200 && r) { ok(r); return; }
-          ko(erroreCon(r && r.codice ? r.codice : x.status === 403 ? 'gettone' : 'servizio', r && r.error));
+          if ((x.status === 200 && r) || x.status === 204 || (x.status >= 200 && x.status < 300 && metodo)) { ok(r || {}); return; }
+          ko(erroreCon(r && r.codice ? r.codice : x.status === 403 ? 'gettone' : x.status === 401 ? 'accesso' : 'servizio', r && r.error));
         };
         x.onerror = function () { ko(erroreCon('servizio')); };
         x.ontimeout = function () { ko(erroreCon('lento')); };
@@ -162,16 +167,23 @@
         x.send(corpo ? JSON.stringify(corpo) : null);
       });
     }).then(null, function (e) {
-      if (e.codice === 'gettone' && !riprovato) { serv.gettone = ''; return chiedi(via, param, corpo, true); }
+      if (e.codice === 'gettone' && !riprovato) { serv.gettone = ''; return chiedi(via, param, corpo, true, metodo); }
+      // Jellyfin non riconosce piu' l'accesso (password cambiata, accesso tolto): si torna a collegarlo
+      if (e.codice === 'accesso' && jf.stato && jf.stato.utente) { jf.stato.utente = null; jf.dati = null; }
       throw e;
     });
   }
+  // una domanda a Jellyfin, dal ponte del servizio: percorso di Jellyfin e parametri (il token lo mette il servizio)
+  function chiediJf(percorso, param, corpo, metodo) { return chiedi('jf/p/' + percorso, param, corpo, false, metodo); }
   function urlFile(d, p, nome, audio) {
     // il nome (con l'estensione) nell'indirizzo: alcuni lettori dei TV guardano quello
     return serv.base + '/api/video/g/' + serv.gettone + '/file/' + encodeURIComponent(String(nome || 'video').replace(/[\/\\?#]/g, '_')) +
       '?' + query({ d: d, p: p, a: audio || 0 });
   }
-  function urlImmagine(d, ref) { return serv.base + '/api/video/g/' + serv.gettone + '/immagine?' + query({ d: d, p: ref.p, k: ref.k }); }
+  function urlImmagine(d, ref, w, h, tutta) {
+    if (ref.jf) return serv.base + '/api/video/g/' + serv.gettone + '/' + JF.percorsoImmagine(ref, w, h, tutta);
+    return serv.base + '/api/video/g/' + serv.gettone + '/immagine?' + query({ d: d, p: ref.p, k: ref.k });
+  }
 
   /* ============================================================ le schede dal servizio (NFO, immagini, tag) */
 
@@ -260,7 +272,8 @@
           c.width = Math.max(1, lw);
           c.height = Math.max(1, lh);
           c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-          url = c.toDataURL('image/png');
+          // un logo quasi vuoto (tutto trasparente: capita) non si usa, resta il titolo scritto
+          url = pieno(c) ? c.toDataURL('image/png') : null;
         } else {
           // una copertina o uno sfondo: si riempie tagliando il centro (un po' piu' in alto: i volti)
           var s = Math.max(x.w / iw, x.h / ih), sw = x.w / s, sh = x.h / s;
@@ -271,7 +284,13 @@
       fine(url);
     };
     im.onerror = function () { fine(null); };
-    im.src = urlImmagine(x.d, x.ref);
+    im.src = urlImmagine(x.d, x.ref, x.w, x.h, x.tutta);
+  }
+  // quanto di un logo si vede: almeno il 2% dei punti non trasparenti (uno ogni 4, basta per saperlo)
+  function pieno(c) {
+    var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, visti = 0, tot = 0;
+    for (var i = 3; i < d.length; i += 16) { tot++; if (d[i] > 40) visti++; }
+    return tot > 0 && visti / tot >= 0.02;
   }
   // un'immagine dentro un riquadro: compare con una dissolvenza quando e' pronta
   function mettiImg(box, d, ref, w, h, tutta, poi) {
@@ -319,7 +338,7 @@
 
   /* ============================================================ memoria (64 KB per app, tenuta dalla home) */
 
-  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta' };
+  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: true };
   var punti = {}; // chiave -> { d, p, dim, nome, t, dur, quando, finito }
   var cartelle = {}; // "disco|cartella" -> { a: lingua dell'audio, s: lingua dei sottotitoli o 'no', quando }: le puntate
   function leggiMemoria() {
@@ -371,13 +390,19 @@
   /* ============================================================ schermi */
 
   var schermo = '';
+  var memInizio = null;
   function mostra(nome) {
+    if (schermo === 'inizio' && nome !== 'inizio' && pag && pag.corpo === $('inizio-corpo')) memInizio = pag;
     schermo = nome;
     $('schermo-inizio').hidden = nome !== 'inizio';
     $('schermo-libreria').hidden = nome !== 'libreria';
     $('schermo-scheda').hidden = nome !== 'scheda';
     $('schermo-lettore').hidden = nome !== 'lettore';
+    $('schermo-cerca').hidden = nome !== 'cerca';
+    $('schermo-collega').hidden = nome !== 'collega';
     $('sfondo').hidden = nome === 'lettore';
+    // il trailer dietro la scheda: solo li' (e mai insieme al lettore: un decoder alla volta)
+    if (nome !== 'scheda') fermaTrailer();
   }
   var fermoAzioni = [];
   function fermo(titolo, testo, pulsanti) {
@@ -431,17 +456,21 @@
     var sez = R.sezione, alto = altezzaIn(sez, pag.corpo), h = window.innerHeight;
     var y = pag.r === 0 ? 0 : Math.max(0, alto + sez.offsetHeight - h * 0.93);
     pag.corpo.style.transform = 'translateY(' + (-Math.round(y)) + 'px)';
+    var sch0 = pag.corpo.parentNode;
+    if (sch0 && sch0.classList) { if (y > 0) sch0.classList.add('scorso'); else sch0.classList.remove('scorso'); }
     if (R.quando) R.quando(e, R.k);
+    caricaVicine();
   }
   function tastoPagina(a) {
     if (!pag || !pag.righe.length) return a === 'up' || a === 'down' || a === 'left' || a === 'right';
     var R = pag.righe[pag.r];
     if (a === 'left' || a === 'right') {
       var k = R.k + (a === 'left' ? -1 : 1);
-      if (k >= 0 && k < R.voci.length) { R.k = k; evidenzia(); }
+      if (k >= 0 && k < R.voci.length) { R.k = k; pag.mosso = true; evidenzia(); }
       return true;
     }
     if (a === 'up' || a === 'down') {
+      pag.mosso = true;
       var r = pag.r + (a === 'up' ? -1 : 1);
       while (r >= 0 && r < pag.righe.length && !pag.righe[r].voci.length) r += a === 'up' ? -1 : 1;
       if (r >= 0 && r < pag.righe.length) { pag.r = r; evidenzia(); }
@@ -476,6 +505,7 @@
     mostra('inizio');
     sfondoChiave = null;
     disegnaInizio(scegli || 'tieni');
+    jfCaricaInizio(false);
     caricaDischi(true);
     clearInterval(dischiTimer);
     // una chiavetta appena attaccata compare da sola
@@ -501,12 +531,17 @@
   }
   var eroeDi = null;
   function disegnaInizio(scegli) {
-    var vecchia = pag && pag.corpo === $('inizio-corpo') ? pag : null, l = continua();
-    // la fila Continua a guardare
+    var vecchia = pag && pag.corpo === $('inizio-corpo') ? pag : memInizio, l = continuaTutti();
+    // la fila Continua a guardare (chiavette e Jellyfin)
     var fc = $('fila-continua');
     svuota(fc);
     $('sez-continua').hidden = !l.length;
-    l.forEach(function (x) { cartaContinua(x, fc); });
+    l.forEach(function (c) {
+      if (!c.jf) { cartaContinua(c.x, fc); return; }
+      cartaJf(c.jf, 'orizzontale', fc, { sotto: 'Mancano ' + tempo(Math.max(0, c.s.durata * 60 - c.s.punto)),
+        apri: function () { guardaJf(c.jf, { ritorno: tornaInizio, t: c.s.punto }); } });
+    });
+    var righeJf = disegnaRigheJf();
     // chiavette e dischi
     var fd = $('fila-dischi');
     svuota(fd);
@@ -522,18 +557,23 @@
       c.addEventListener('click', function () { apriLibreria(d.id, ''); });
       fd.appendChild(c);
     });
-    disegnaVuoto(l.length);
-    // il film grande: l'ultimo da riprendere (poi quello scelto nella fila)
-    $('eroe').hidden = !l.length;
-    if (l.length && (!eroeDi || !continua().some(function (x) { return x === eroeDi; }))) mostraEroe(l[0]);
-    // le righe: i pulsanti del film grande, Continua, chiavette (o "Controlla di nuovo")
+    disegnaVuoto(l.length || jfAttivo());
+    disegnaAltro();
+    // il film grande: l'ultimo da riprendere (poi quello scelto nella fila); senza, l'ultimo arrivato su Jellyfin
+    var primo = l[0] || (jf.dati && jf.dati.aggiunti[0] ? { jf: jf.dati.aggiunti[0].voci[0] } : null);
+    $('eroe').hidden = !primo;
+    if (primo) mostraEroeDi(primo);
+    // le righe: i pulsanti del film grande, Continua, Jellyfin, chiavette (o "Controlla di nuovo"), Altro
     nuovaPagina($('inizio-corpo'));
-    if (l.length) aggiungiRiga($('eroe-pulsanti'), vociDi($('eroe-pulsanti')), { sezione: $('eroe'), chiave: 'eroe' });
-    if (l.length) aggiungiRiga(fc, vociDi(fc), { sezione: $('sez-continua'), chiave: 'continua', quando: function (e, k) { mostraEroe(l[k]); } });
+    if (primo) aggiungiRiga($('eroe-pulsanti'), vociDi($('eroe-pulsanti')), { sezione: $('eroe'), chiave: 'eroe' });
+    if (l.length) aggiungiRiga(fc, vociDi(fc), { sezione: $('sez-continua'), chiave: 'continua', quando: function (e, k) { mostraEroeDi(l[k]); } });
+    righeJf.forEach(function (R) { aggiungiRiga(R.box, vociDi(R.box), { sezione: R.sezione, chiave: R.chiave, quando: R.quando }); });
     if (dischi.length) aggiungiRiga(fd, vociDi(fd), { sezione: $('sez-dischi'), chiave: 'dischi' });
     if (!dischi.length) aggiungiRiga($('vuoto'), [$('vuoto-riprova')], { sezione: $('vuoto'), chiave: 'vuoto' });
+    aggiungiRiga($('fila-altro'), vociDi($('fila-altro')), { sezione: $('sez-altro'), chiave: 'altro' });
     // la scelta resta dov'era (stessa riga, stessa voce); all'inizio sul film grande o sulle chiavette
-    if (vecchia && scegli === 'tieni') {
+    if (vecchia && vecchia.mosso && scegli === 'tieni') {
+      pag.mosso = true;
       var R0 = vecchia.righe[vecchia.r];
       for (var i = 0; i < pag.righe.length; i++) {
         if (R0 && pag.righe[i].chiave === R0.chiave) {
@@ -645,6 +685,882 @@
     })(0);
   }
 
+  /* ============================================================ Jellyfin: il server di casa, dal ponte del servizio
+   * Il servizio del TV parla con UN server Jellyfin (scelto qui, salvato li' col suo token: l'app non lo vede mai). Le
+   * file dell'inizio, le schede, le persone, la ricerca e il lettore usano le stesse pagine delle chiavette. */
+
+  var jf = { stato: null, dati: null, caricato: 0, giro: 0, errore: '', riprova: null };
+  function uid() { return jf.stato && jf.stato.utente ? jf.stato.utente.id : ''; }
+  function jfAttivo() { return !!uid(); }
+  function lettiTv() { return jf.stato && jf.stato.letti ? jf.stato.letti : null; }
+  function voci(r) { return r && Array.isArray(r.Items) ? r.Items : Array.isArray(r) ? r : []; }
+  // i campi e le immagini da chiedere nelle liste (pochi: il TV ha poca memoria)
+  // (Jellyfin 12.4: le rotte nuove, con userId nella domanda: /Items, /UserViews, /UserItems/Resume, /UserFavoriteItems...)
+  function conCampi(o) {
+    if (!o.UserId && !o.userId) o.userId = uid();
+    o.Fields = o.Fields || JF.CAMPI;
+    o.EnableImageTypes = 'Primary,Backdrop,Thumb,Logo';
+    o.ImageTypeLimit = 1;
+    o.EnableUserData = true;
+    return o;
+  }
+  function jfCaricaStato(poi) {
+    chiedi('jf/stato').then(function (r) { jf.stato = r; if (poi) poi(); }, function (e) {
+      // un servizio senza il ponte (TV non aggiornato): niente Jellyfin, le chiavette restano
+      jf.stato = { server: null, utente: null, errore: e.codice };
+      if (poi) poi();
+    });
+  }
+  // per Jellyfin decide il server (le sue soglie: un punto lo salva solo se vale la pena riprendere)
+  function riprendibileJf(s) { return !!s && !s.visto && s.punto > 1 && (!s.durata || s.punto < s.durata * 60 - 1); }
+  function sottoJf(s) {
+    if (s.tipo === 'puntata') return 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '');
+    if (s.tipo === 'serie') return (s.anno ? s.anno + ' · ' : '') + (s.figli ? s.figli + (s.figli === 1 ? ' stagione' : ' stagioni') : 'Serie');
+    if (s.tipo === 'collezione') return s.figli ? s.figli + ' film' : 'Collezione';
+    return [s.anno ? String(s.anno) : '', s.durata > 2 ? durataBella(s.durata) : ''].filter(Boolean).join(' · ') || 'Film';
+  }
+
+  // le file dell'inizio, tutte insieme (una domanda per fila, al massimo ogni minuto); si ridisegna quando arrivano
+  function jfCaricaInizio(forza) {
+    if (!jfAttivo()) { jf.dati = null; return; }
+    if (!forza && jf.dati && Date.now() - jf.caricato < 60000) return;
+    var giro = ++jf.giro, u = uid(), d = { riprendi: [], prossimi: [], viste: [], aggiunti: [], generi: [], collezioni: [], preferiti: [] };
+    jf.caricato = Date.now();
+    function no(e) { return e; }
+    Promise.all([
+      chiediJf('UserItems/Resume', conCampi({ Limit: 12, MediaTypes: 'Video' })).then(function (r) { d.riprendi = voci(r); }, no),
+      chiediJf('Shows/NextUp', conCampi({ UserId: u, Limit: 16, EnableResumable: false })).then(function (r) { d.prossimi = voci(r); }, no),
+      chiediJf('UserViews', { userId: u }).then(function (r) {
+        d.viste = voci(r).filter(function (x) { return /^(movies|tvshows|homevideos|boxsets|mixed)$/.test(x.CollectionType || 'mixed'); });
+        var film = d.viste.filter(function (x) { return x.CollectionType === 'movies'; })[0];
+        var dopo = d.viste.filter(function (x) { return x.CollectionType !== 'boxsets'; }).slice(0, 4).map(function (vista) {
+          return chiediJf('Items/Latest', conCampi({ ParentId: vista.Id, Limit: 16, GroupItems: true })).then(function (r2) {
+            if (voci(r2).length) d.aggiunti.push({ vista: vista, voci: voci(r2) });
+          }, no);
+        });
+        if (film) dopo.push(chiediJf('Genres', { ParentId: film.Id, UserId: u, SortBy: 'SortName', Limit: 30 }).then(function (r3) {
+          d.generi = voci(r3).map(function (g) { return { nome: String(g.Name || ''), vista: film.Id }; }).filter(function (g) { return g.nome; });
+        }, no));
+        return Promise.all(dopo);
+      }, no),
+      chiediJf('Items', conCampi({ IncludeItemTypes: 'BoxSet', Recursive: true, SortBy: 'SortName', Limit: 20 })).then(function (r) { d.collezioni = voci(r); }, no),
+      chiediJf('Items', conCampi({ Filters: 'IsFavorite', IncludeItemTypes: 'Movie,Series,Episode', Recursive: true, SortBy: 'DatePlayed,SortName',
+        SortOrder: 'Descending', Limit: 20 })).then(function (r) { d.preferiti = voci(r); }, no)
+    ]).then(function (r) {
+      if (giro !== jf.giro) return;
+      d.aggiunti.sort(function (a, b) { return d.viste.indexOf(a.vista) - d.viste.indexOf(b.vista); });
+      var rete = r.filter(function (x) { return x && (x.codice === 'rete' || x.codice === 'servizio' || x.codice === 'lento'); }).length;
+      jf.errore = rete >= 3 ? 'rete' : '';
+      if (r.some(function (x) { return x && x.codice === 'accesso'; })) { jf.dati = null; if (jf.stato) jf.stato.utente = null; }
+      else if (jf.errore) { jf.dati = null; jf.caricato = 0; }
+      else jf.dati = d;
+      if (schermo === 'inizio') disegnaInizio('tieni');
+      // il Mac spento: si riprova da soli ogni 30 secondi finche' si sta all'inizio
+      clearTimeout(jf.riprova);
+      if (jf.errore) jf.riprova = setTimeout(function () { if (schermo === 'inizio' && jfAttivo()) jfCaricaInizio(true); }, 30000);
+    });
+  }
+  // Continua a guardare: le chiavette (la memoria dell'app) e Jellyfin (il punto lo tiene il server), i piu' recenti prima
+  function continuaTutti() {
+    var l = continua().map(function (x) { return { x: x, quando: x.quando }; });
+    if (jf.dati) jf.dati.riprendi.forEach(function (it) { var s = JF.scheda(it); l.push({ jf: it, s: s, quando: s.ultimaVolta }); });
+    return l.sort(function (a, b) { return b.quando - a.quando; }).slice(0, 16);
+  }
+  // una carta di Jellyfin: poster (2:3) o orizzontale (16:9); l'immagine quando la fila si avvicina (vedi caricaVicine)
+  function cartaJf(it, forma, fila, opz) {
+    opz = opz || {};
+    var s = JF.scheda(it), poster = forma === 'poster', c = el('div', 'carta' + (poster ? ' poster' : '')), q = el('div', 'quadro');
+    var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
+    c.setAttribute('data-chiave', 'jf:' + it.Id);
+    c.setAttribute('data-tv', '');
+    q.appendChild(finta(titolo, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio : s.anno || '', s.tipo === 'puntata' || s.tipo === 'serie' ? 'serie' : 'film'));
+    if (s.visto && s.tipo !== 'serie') { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); q.appendChild(vs); }
+    else if (s.percento > 0 && s.percento < 100) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.round(s.percento) + '%'; b.appendChild(f); q.appendChild(b); }
+    else if (s.tipo === 'serie' && s.nonVisti) q.appendChild(el('div', 'num', String(s.nonVisti)));
+    if (opz.fonte) q.appendChild(el('div', 'fonte', opz.fonte));
+    c.appendChild(q);
+    c.appendChild(el('div', 'nome', opz.nome || titolo));
+    c.appendChild(el('div', 'sotto', opz.sotto !== undefined ? opz.sotto : sottoJf(s)));
+    c.addEventListener('click', function () { if (opz.apri) opz.apri(it); else apriJf(it, { indietro: tornaInizio }); });
+    var ref = poster ? s.img.poster : opz.ref || s.img.landscape || s.img.fanart || s.img.poster;
+    c.carica = function () {
+      if (ref) mettiImg(q, '', ref, poster ? 220 : 448, poster ? 330 : 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
+    };
+    c.scheda = s;
+    fila.appendChild(c);
+    return c;
+  }
+  // le immagini delle file vicine a quella scelta (le altre quando ci si arriva): l'inizio parte leggero
+  function caricaVicine() {
+    if (!pag) return;
+    for (var r = Math.max(0, pag.r - 1); r <= Math.min(pag.righe.length - 1, pag.r + 2); r++) {
+      var R = pag.righe[r];
+      for (var k = Math.max(0, R.k - 2); k < Math.min(R.voci.length, R.k + 9); k++) {
+        var c = R.voci[k];
+        if (c && c.carica) { var f = c.carica; c.carica = null; f(); }
+      }
+    }
+  }
+  function tornaInizio() { apriInizio('tieni'); }
+  // le file di Jellyfin dentro l'inizio: [{ box, sezione, chiave, quando }]
+  function disegnaRigheJf() {
+    var box = $('jf-righe'), out = [], d = jf.dati;
+    svuota(box);
+    if (!d && jf.errore === 'rete' && jfAttivo()) {
+      // il server non risponde: una riga sola, col perche' e un pulsante per riprovare
+      var sz = el('section', 'sezione jf-giu'), pp = el('div', 'pulsanti');
+      sz.appendChild(el('h2', '', 'Jellyfin'));
+      sz.appendChild(el('p', 'trama', (jf.stato.server.nome || 'Jellyfin') + ' non risponde: il Mac e\' acceso e Jellyfin e\' aperto? Riprovo da solo.'));
+      pp.appendChild(pulsante('Riprova adesso', 'ripeti', function () { messaggio('Riprovo…'); jfCaricaInizio(true); }));
+      sz.appendChild(pp);
+      box.appendChild(sz);
+      out.push({ box: pp, sezione: sz, chiave: 'jf:giu' });
+      return out;
+    }
+    if (!d) return out;
+    function sezione(titolo, chiave, forma, lista, opz) {
+      if (!lista.length) return;
+      var sz = el('section', 'sezione'), fila = el('div', 'fila');
+      sz.appendChild(el('h2', '', titolo));
+      sz.appendChild(fila);
+      box.appendChild(sz);
+      lista.forEach(function (x) { if (opz && opz.carta) opz.carta(x, fila); else cartaJf(x, forma, fila, opz); });
+      out.push({ box: fila, sezione: sz, chiave: chiave, quando: function (e) { if (e.scheda) sfondo('', e.scheda.img.fanart || e.scheda.img.poster, false); } });
+    }
+    sezione('Prossimi episodi', 'jf:prossimi', 'orizzontale', d.prossimi, { sotto: undefined });
+    d.aggiunti.forEach(function (a) { sezione('Aggiunti di recente · ' + a.vista.Name, 'jf:aggiunti:' + a.vista.Id, 'poster', a.voci); });
+    sezione('Le tue librerie', 'jf:viste', 'orizzontale', d.viste, { sotto: '', carta: cartaVista });
+    sezione('Generi', 'jf:generi', '', d.generi, { carta: cartaGenere });
+    sezione('Collezioni', 'jf:collezioni', 'poster', d.collezioni);
+    sezione('Preferiti', 'jf:preferiti', 'poster', d.preferiti);
+    return out;
+  }
+  function cartaVista(vista, fila) {
+    var c = cartaJf(vista, 'orizzontale', fila, { sotto: vista.CollectionType === 'tvshows' ? 'Serie' : vista.CollectionType === 'boxsets' ? 'Collezioni' : 'Film',
+      apri: function () { apriLibreriaJf({ titolo: vista.Name, vista: vista, indietro: tornaInizio }); } });
+    return c;
+  }
+  function cartaGenere(g, fila) {
+    var c = el('div', 'carta genere'), q = el('div', 'quadro'), h = tinta(g.nome);
+    c.setAttribute('data-tv', '');
+    c.setAttribute('data-chiave', 'genere:' + g.nome);
+    q.style.backgroundImage = 'linear-gradient(135deg, hsl(' + h + ',55%,38%) 0%, hsl(' + ((h + 48) % 360) + ',60%,16%) 100%)';
+    q.appendChild(el('div', 'gn', g.nome));
+    c.appendChild(q);
+    c.addEventListener('click', function () {
+      apriLibreriaJf({ titolo: g.nome, query: { ParentId: g.vista, Genres: g.nome, IncludeItemTypes: 'Movie', Recursive: true }, indietro: tornaInizio });
+    });
+    fila.appendChild(c);
+    return c;
+  }
+  // la fila "Altro": cerca, Jellyfin (collegare o vedere com'e' collegato), anteprime nella scheda
+  function disegnaAltro() {
+    var f = $('fila-altro');
+    svuota(f);
+    function carta(chiave, ic, nome, stato, fn) {
+      var c = el('div', 'carta altro'), q = el('div', 'quadro');
+      c.setAttribute('data-tv', '');
+      c.setAttribute('data-chiave', 'altro:' + chiave);
+      q.appendChild(icona(ICONE[ic]));
+      if (stato) q.appendChild(el('div', 'stato', stato));
+      c.appendChild(q);
+      c.appendChild(el('div', 'nome', nome));
+      c.addEventListener('click', fn);
+      f.appendChild(c);
+    }
+    if (jfAttivo()) carta('cerca', 'cerca', 'Cerca', 'film, serie, persone', function () { apriCerca(tornaInizio); });
+    var st = jf.stato || {};
+    if (!st.errore || st.server) {
+      carta('jellyfin', 'jellyfin', jfAttivo() ? 'Jellyfin · ' + (st.server.nome || 'server') : 'Collega Jellyfin',
+        jfAttivo() ? (jf.errore === 'rete' ? 'non risponde' : 'collegato come ' + st.utente.nome) : 'film e serie dal Mac', function () { apriCollega(tornaInizio); });
+    }
+    carta('velocita', 'ingranaggio', 'Velocità del TV', 'per l\'audio DTS', misuraVelocita);
+    carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', function () {
+      prefs.anteprime = !prefs.anteprime;
+      salvaPrefs();
+      messaggio(prefs.anteprime ? 'Anteprime accese: il trailer parte da solo, senza audio' : 'Anteprime spente');
+      disegnaInizio('tieni');
+    });
+  }
+  // quanto e' veloce questo TV per convertire l'audio DTS e TrueHD (prove/audio-tv): qualche secondo di misura nel servizio
+  function misuraVelocita() {
+    var indietro = [{ testo: 'Indietro', fn: chiudiFermo }];
+    fermo('Velocità del TV', 'Misuro… (qualche secondo)', indietro);
+    chiedi('tv/cpu').then(function (r) {
+      if (!fermoAperto()) return;
+      var t;
+      if (!r.wasm) t = 'Questo TV non ha WebAssembly (Node ' + r.node + '): l\'audio DTS non si potrà convertire sul TV.';
+      else {
+        var q = Math.round(r.dtsAc3 * 100), q2 = Math.round(r.truehdAc3 * 100);
+        t = 'Rispetto al Mac di riferimento questo TV è ' + String(r.rapporto).replace('.', ',') + ' volte più lento.\n' +
+          'Convertire l\'audio DTS in Dolby Digital costerebbe circa il ' + q + '% di un core' + (q < 50 ? ' (regge)' : q < 80 ? ' (al limite)' : ' (troppo)') +
+          '; il TrueHD Atmos il ' + q2 + '%.\nNode ' + r.node + ' · ' + r.arch + ' · worker_threads ' + (r.workerThreads ? 'sì' : 'no') +
+          '\nWebAssembly: fir ' + r.wasm.fir + ' ms, quant ' + r.wasm.quant + ' ms · JavaScript: fir ' + r.js.fir + ' ms, quant ' + r.js.quant + ' ms';
+      }
+      fermo('Velocità del TV', t, indietro);
+    }, function (e) {
+      if (fermoAperto()) fermo('Velocità del TV', e.codice === 'assente' || e.codice === 'vecchio' ? 'Il servizio di questo TV è vecchio: riavvia il TV.' : 'Non riesco a misurare: riprova.', indietro);
+    });
+  }
+  // il film grande in cima, da Jellyfin: logo, anno, durata, trama, Riprendi o Guarda
+  function mostraEroeJf(it) {
+    if (!it) return;
+    eroeDi = it;
+    var s = JF.scheda(it), logo = $('eroe-logo'), titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
+    svuota(logo);
+    logo.appendChild(el('h1', '', titolo));
+    if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && eroeDi === it) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+    metaDi($('eroe-meta'), s, null, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '');
+    $('eroe-trama').textContent = s.trama;
+    var pp = $('eroe-pulsanti'), ripr = riprendibileJf(s);
+    svuota(pp);
+    pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', function () { guardaJf(it, { ritorno: tornaInizio, t: ripr ? s.punto : 0 }); },
+      ripr ? tempo(s.punto) + ' di ' + tempo(s.durata * 60) : ''));
+    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: tornaInizio, daCapo: true }); }));
+    pp.appendChild(pulsante('Scheda', '', function () { apriJf(it, { indietro: tornaInizio }); }));
+    if (pag && pag.righe[0] && pag.righe[0].chiave === 'eroe') { pag.righe[0].voci = vociDi(pp); if (pag.r === 0) evidenzia(); }
+    sfondo('', s.img.fanart || s.img.landscape || s.img.poster, true);
+  }
+  function mostraEroeDi(c) { if (!c) return; if (c.jf) mostraEroeJf(c.jf); else mostraEroe(c.x); }
+
+  // OK su una voce di Jellyfin: film, puntata e serie la scheda; collezioni e librerie la griglia; persone la loro pagina
+  function apriJf(it, opz) {
+    opz = opz || {};
+    var t = it.Type;
+    if (t === 'Season' && it.SeriesId) apriSchedaJf(it.SeriesId, { stagione: it.Id, indietro: opz.indietro });
+    else if (t === 'BoxSet') apriLibreriaJf({ titolo: it.Name, query: { ParentId: it.Id, SortBy: 'ProductionYear,SortName', SortOrder: 'Ascending' }, indietro: opz.indietro, collezione: true });
+    else if (t === 'CollectionFolder' || t === 'UserView' || t === 'Folder') apriLibreriaJf({ titolo: it.Name, vista: it, indietro: opz.indietro });
+    else if (t === 'Person') apriPersonaJf(it.Id, opz.indietro);
+    else apriSchedaJf(it.Id, { indietro: opz.indietro });
+  }
+
+  /* ---------------------------------------------------------- la scheda di Jellyfin (film, puntata, serie) */
+
+  function pulisciScheda(titolo) {
+    var logo = $('sc-logo');
+    svuota(logo);
+    logo.appendChild(el('h1', '', titolo || ''));
+    $('sc-sopratitolo').textContent = '';
+    svuota($('sc-meta'));
+    svuota($('sc-badge'));
+    $('sc-slogan').textContent = '';
+    $('sc-trama').textContent = '';
+    svuota($('sc-pulsanti'));
+    svuota($('sc-righe'));
+    $('sc-avviso').hidden = true;
+    ['sez-stagioni', 'sez-puntate', 'sez-cast', 'sez-simili'].forEach(function (id) { $(id).hidden = true; });
+    nuovaPagina($('scheda-corpo'));
+    evidenzia();
+  }
+  // per tornare a questa scheda (dalla persona, da un film simile, dal lettore), sulla riga di adesso
+  function riapriScheda(x) {
+    var R = pag && pag.corpo === $('scheda-corpo') ? pag.righe[pag.r] : null, riga = R ? { chiave: R.chiave, k: R.k } : null;
+    return function () {
+      var o = {};
+      for (var k in x.opz) if (Object.prototype.hasOwnProperty.call(x.opz, k)) o[k] = x.opz[k];
+      o.riga = riga;
+      if (x.stagioneId) o.stagione = x.stagioneId;
+      apriSchedaJf(x.id, o);
+    };
+  }
+  function apriSchedaJf(id, opz) {
+    opz = opz || {};
+    var giro = ++schGiro, x = sch = { jf: true, id: id, opz: opz, indietro: opz.indietro || tornaInizio, s: null, it: null, giro: giro,
+      stagioni: [], puntate: [], k: 0, simili: [] };
+    clearInterval(dischiTimer);
+    mostra('scheda');
+    pulisciScheda('');
+    chiediJf('Items/' + id, { userId: uid() }).then(function (it) {
+      if (x.giro !== schGiro) return;
+      x.it = it;
+      x.s = JF.scheda(it);
+      if (it.Type === 'Series') schedaSerieJf(x); else disegnaSchedaJf(x);
+      chiediJf('Items/' + (it.Type === 'Episode' && it.SeriesId ? it.SeriesId : id) + '/Similar', conCampi({ UserId: uid(), Limit: 16 })).then(function (r) {
+        if (x.giro !== schGiro) return;
+        x.simili = voci(r);
+        disegnaSimili(x);
+        righeScheda(x);
+      }, function () {});
+      preparaTrailer(x);
+    }, function (e) {
+      if (x.giro !== schGiro) return;
+      $('sc-avviso').textContent = e.codice === 'accesso' ? 'Jellyfin chiede di collegarsi di nuovo.' : e.codice === 'rete' ?
+        'Jellyfin non risponde: il Mac e\' acceso?' : 'Non riesco ad aprire questa scheda.';
+      $('sc-avviso').hidden = false;
+    });
+  }
+  function disegnaSchedaJf(x) {
+    var s = x.s, it = x.it, logo = $('sc-logo'), ms = JF.sorgente(it), L0 = lettiTv();
+    var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
+    $('sc-sopratitolo').textContent = s.tipo === 'puntata' ? 'Stagione ' + s.stagione + ' · Puntata ' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '';
+    if (!x.logoFatto) {
+      x.logoFatto = true;
+      svuota(logo);
+      logo.appendChild(el('h1', '', titolo));
+      if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+    }
+    metaDi($('sc-meta'), s, null, '');
+    if (s.durata) $('sc-meta').appendChild(el('span', '', finisceAlle(s.durata * 60 - (riprendibileJf(s) ? s.punto : 0))));
+    var badge = $('sc-badge');
+    svuota(badge);
+    JF.badge(it, L0).forEach(function (b) {
+      badge.appendChild(el('span', 'badge' + (b.forte ? ' forte' : '') + (b.no ? ' no' : '') + (b.conv ? ' conv' : ''), b.t + (b.conv ? ' · convertito' : '')));
+    });
+    $('sc-slogan').textContent = s.slogan;
+    $('sc-trama').textContent = s.trama;
+    var pp = $('sc-pulsanti'), ripr = riprendibileJf(s);
+    svuota(pp);
+    x.guarda = function () { guardaJf(it, { ritorno: riapriScheda(x), t: ripr ? s.punto : 0 }); };
+    pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', x.guarda, ripr ? 'da ' + tempo(s.punto) : ''));
+    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: riapriScheda(x), daCapo: true }); }));
+    if (s.trailer) pp.appendChild(pulsante('Trailer', 'trailer', function () { guardaTrailerJf(x); }));
+    pp.appendChild(pulsanteStato(s.preferito, 'cuore', 'Preferito', function (b) { cambiaPreferito(x, b); }));
+    pp.appendChild(pulsanteStato(s.visto, 'spunta', 'Visto', function (b) { cambiaVisto(x, b); }));
+    var righe = $('sc-righe');
+    svuota(righe);
+    function riga(a, b) { if (!b) return; var r = el('div'); r.appendChild(document.createTextNode(a + '  ')); r.appendChild(el('b', '', b)); righe.appendChild(r); }
+    riga('Regia', s.registi.join(', '));
+    riga('Scritto da', s.scrittori.join(', '));
+    riga('Studio', s.studi.join(', '));
+    var strada = JF.strada(it, L0);
+    if (ms) riga('File', String(ms.Path || ms.Name || '').split(/[\/\\]/).pop() + (ms.Size ? ' · ' + peso(ms.Size) : '') +
+      (ms.Bitrate ? ' · ' + String(Math.round(ms.Bitrate / 1e5) / 10).replace('.', ',') + ' Mbps' : ''));
+    riga('Al TV', strada === 'diretta' ? 'il file vero, come da una chiavetta' : strada === 'audio' ? 'video originale, audio convertito dal server' :
+      strada === 'converti' ? 'convertito dal server' : '');
+    var avv = '';
+    if (strada === 'converti') avv = 'Il TV non legge questo video cosi\' com\'e\': lo converte Jellyfin (il Mac lavora, la qualita\' cala un po\').';
+    else if (strada === 'audio') avv = 'L\'audio di questo film il TV non lo legge: Jellyfin lo converte in Dolby Digital Plus, il video resta l\'originale.';
+    else if (ms && ms.Bitrate > 80e6) avv = 'File molto pesante (' + Math.round(ms.Bitrate / 1e6) + ' Mbps): su alcuni TV Samsung del 2022 oltre 80 Mbps il video puo\' scattare. Nel pannello del lettore c\'e\' la qualita\'.';
+    $('sc-avviso').textContent = avv;
+    $('sc-avviso').hidden = !avv;
+    sfondo('', s.img.fanart || s.img.landscape || s.img.poster, true, true);
+    disegnaCast(x);
+    disegnaSimili(x);
+    righeScheda(x);
+  }
+  // un pulsante acceso/spento (preferito, visto)
+  function pulsanteStato(acceso, ic, testo, fn) {
+    var b = pulsante(testo, ic, function () { fn(b); });
+    if (acceso) b.className += ' acceso';
+    return b;
+  }
+  function cambiaPreferito(x, b) {
+    var si = !/\bacceso\b/.test(b.className);
+    b.className = b.className.replace(/\s*\bacceso\b/, '') + (si ? ' acceso' : '');
+    chiediJf('UserFavoriteItems/' + x.id, { userId: uid() }, si ? {} : null, si ? 'POST' : 'DELETE').then(function () {
+      x.s.preferito = si;
+      jf.caricato = 0;
+      messaggio(si ? 'Nei preferiti' : 'Tolto dai preferiti');
+    }, function () { messaggio('Jellyfin non risponde: riprova'); });
+  }
+  function cambiaVisto(x, b) {
+    var si = !/\bacceso\b/.test(b.className);
+    b.className = b.className.replace(/\s*\bacceso\b/, '') + (si ? ' acceso' : '');
+    chiediJf('UserPlayedItems/' + x.id, { userId: uid() }, si ? {} : null, si ? 'POST' : 'DELETE').then(function () {
+      x.s.visto = si;
+      jf.caricato = 0;
+      messaggio(si ? 'Segnato come visto' : 'Segnato da vedere');
+    }, function () { messaggio('Jellyfin non risponde: riprova'); });
+  }
+  function disegnaSimili(x) {
+    var f = $('fila-simili');
+    svuota(f);
+    $('sez-simili').hidden = !x.simili.length;
+    x.simili.forEach(function (it) { var c = cartaJf(it, 'poster', f, { apri: function () { apriJf(it, { indietro: riapriScheda(x) }); } }); c.carica(); c.carica = null; });
+  }
+  // le righe della scheda col telecomando (la scelta resta dov'era: tornando da una persona o dal lettore)
+  function righeScheda(x) {
+    var vecchia = pag && pag.corpo === $('scheda-corpo') ? pag : null, R0 = vecchia ? vecchia.righe[vecchia.r] : null;
+    var voluta = R0 ? { chiave: R0.chiave, k: R0.k } : x.opz.riga || null;
+    x.opz.riga = null;
+    nuovaPagina($('scheda-corpo'));
+    var pp = $('sc-pulsanti');
+    aggiungiRiga(pp, vociDi(pp), { sezione: $('sc-sopra'), chiave: 'pulsanti' });
+    if (!$('sez-stagioni').hidden) aggiungiRiga($('fila-stagioni'), vociDi($('fila-stagioni')), { sezione: $('sez-stagioni'), k: x.k, chiave: 'stagioni' });
+    if (!$('sez-puntate').hidden) aggiungiRiga($('fila-puntate'), vociDi($('fila-puntate')), { sezione: $('sez-puntate'), chiave: 'puntate', k: x.kPuntata || 0 });
+    if (!$('sez-cast').hidden) aggiungiRiga($('fila-cast'), vociDi($('fila-cast')), { sezione: $('sez-cast'), chiave: 'cast' });
+    if (!$('sez-simili').hidden) aggiungiRiga($('fila-simili'), vociDi($('fila-simili')), { sezione: $('sez-simili'), chiave: 'simili' });
+    if (voluta) {
+      for (var r = 0; r < pag.righe.length; r++) {
+        if (pag.righe[r].chiave === voluta.chiave) { pag.r = r; pag.righe[r].k = Math.min(voluta.k, Math.max(0, pag.righe[r].voci.length - 1)); }
+      }
+    }
+    evidenzia();
+  }
+  // una serie: le stagioni, le puntate della stagione scelta, Riprendi o Guarda la prossima (lo dice Jellyfin)
+  function schedaSerieJf(x) {
+    var u = uid();
+    Promise.all([
+      chiediJf('Shows/' + x.id + '/Seasons', conCampi({ UserId: u })).then(voci, function () { return []; }),
+      chiediJf('Shows/NextUp', conCampi({ UserId: u, SeriesId: x.id, Limit: 1 })).then(voci, function () { return []; })
+    ]).then(function (r) {
+      if (x.giro !== schGiro) return;
+      x.stagioni = r[0];
+      x.prossima = r[1][0] || null;
+      var voluta = x.opz.stagione || (x.prossima && x.prossima.SeasonId) || '';
+      x.k = 0;
+      for (var i = 0; i < x.stagioni.length; i++) if (x.stagioni[i].Id === voluta) x.k = i;
+      disegnaSerieJf(x);
+    });
+  }
+  function disegnaSerieJf(x) {
+    var s = x.s, logo = $('sc-logo');
+    svuota(logo);
+    logo.appendChild(el('h1', '', s.titolo));
+    if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+    $('sc-sopratitolo').textContent = 'Serie' + (x.stagioni.length ? ' · ' + x.stagioni.length + (x.stagioni.length === 1 ? ' stagione' : ' stagioni') : '');
+    metaDi($('sc-meta'), s, null, '');
+    $('sc-trama').textContent = s.trama;
+    sfondo('', s.img.fanart || s.img.poster, true, true);
+    disegnaCast(x);
+    var fs = $('fila-stagioni');
+    svuota(fs);
+    $('sez-stagioni').hidden = x.stagioni.length < 2;
+    x.stagioni.forEach(function (st, i) {
+      var ss = JF.scheda(st), c = el('div', 'stagione' + (i === x.k ? ' attiva' : '')), cop = el('div', 'copertina');
+      cop.appendChild(finta(ss.titolo, '', 'stagione'));
+      c.appendChild(cop);
+      c.appendChild(el('div', 'nome', ss.titolo));
+      c.setAttribute('data-tv', '');
+      c.addEventListener('click', function () { x.k = i; x.stagioneId = st.Id; puntateJf(x); });
+      fs.appendChild(c);
+      if (ss.img.poster) mettiImg(cop, '', ss.img.poster, 192, 288);
+    });
+    x.stagioneId = x.stagioni[x.k] ? x.stagioni[x.k].Id : '';
+    puntateJf(x);
+  }
+  function puntateJf(x) {
+    var st = x.stagioni[x.k];
+    var stg = $('fila-stagioni').children;
+    for (var i = 0; i < stg.length; i++) stg[i].className = 'stagione' + (i === x.k ? ' attiva' : '');
+    if (!st) { x.puntate = []; disegnaPuntateJf(x); return; }
+    chiediJf('Shows/' + x.id + '/Episodes', conCampi({ UserId: uid(), SeasonId: st.Id })).then(function (r) {
+      if (x.giro !== schGiro) return;
+      x.puntate = voci(r);
+      disegnaPuntateJf(x);
+    }, function () { if (x.giro === schGiro) { x.puntate = []; disegnaPuntateJf(x); } });
+  }
+  function disegnaPuntateJf(x) {
+    var fp = $('fila-puntate'), st = x.stagioni[x.k];
+    svuota(fp);
+    $('sez-puntate').hidden = !x.puntate.length;
+    $('puntate-titolo').textContent = (st ? JF.scheda(st).titolo : 'Puntate') + ' · ' + x.puntate.length + (x.puntate.length === 1 ? ' puntata' : ' puntate');
+    x.kPuntata = 0;
+    x.puntate.forEach(function (ep, j) {
+      var s = JF.scheda(ep), c = el('div', 'carta puntata'), q = el('div', 'quadro');
+      q.appendChild(finta(s.titolo, 'S' + s.stagione + ' E' + s.episodio, 'puntata'));
+      q.appendChild(el('div', 'num', 'E' + (s.episodio >= 0 ? s.episodio : j + 1)));
+      if (s.visto) { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); q.appendChild(vs); }
+      else if (s.percento > 0) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.round(s.percento) + '%'; b.appendChild(f); q.appendChild(b); }
+      if (x.prossima && x.prossima.Id === ep.Id) x.kPuntata = j;
+      c.appendChild(q);
+      c.appendChild(el('div', 'nome', (s.episodio >= 0 ? s.episodio + '. ' : '') + s.titolo));
+      c.appendChild(el('div', 'trama-p', s.trama));
+      c.setAttribute('data-tv', '');
+      c.addEventListener('click', function () { guardaJf(ep, { ritorno: riapriScheda(x), t: riprendibileJf(s) ? s.punto : 0 }); });
+      fp.appendChild(c);
+      if (s.img.landscape) mettiImg(q, '', s.img.landscape, 403, 227);
+    });
+    var pp = $('sc-pulsanti'), p = x.prossima;
+    svuota(pp);
+    if (p) {
+      var sp = JF.scheda(p), ripr = riprendibileJf(sp);
+      x.guarda = function () { guardaJf(p, { ritorno: riapriScheda(x), t: ripr ? sp.punto : 0 }); };
+      pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', x.guarda, 'S' + sp.stagione + ' E' + sp.episodio + (ripr ? ' da ' + tempo(sp.punto) : '')));
+    } else if (x.puntate[0]) {
+      x.guarda = function () { guardaJf(x.puntate[0], { ritorno: riapriScheda(x) }); };
+      pp.appendChild(pulsante('Guarda', 'play', x.guarda, 'S' + JF.scheda(x.puntate[0]).stagione + ' E1'));
+    } else x.guarda = null;
+    pp.appendChild(pulsanteStato(x.s.preferito, 'cuore', 'Preferito', function (b) { cambiaPreferito(x, b); }));
+    disegnaSimili(x);
+    righeScheda(x);
+  }
+
+  /* ---------------------------------------------------------- il trailer dietro la scheda (senza audio) */
+
+  var trailer = { timer: null, x: null, sessione: '' };
+  function fermaTrailer() {
+    clearTimeout(trailer.timer);
+    trailer.x = null;
+    // un trailer convertito dal server: la conversione si ferma subito
+    if (trailer.sessione) { chiediJf('Videos/ActiveEncodings', { PlaySessionId: trailer.sessione }, null, 'DELETE').then(null, function () {}); trailer.sessione = ''; }
+    var t = $('trailer');
+    if (!t || !t.getAttribute('src')) { if (t) t.hidden = true; return; }
+    t.className = '';
+    try { t.pause(); } catch (e) {}
+    t.removeAttribute('src');
+    try { t.load(); } catch (e) {}
+    t.hidden = true;
+  }
+  // dopo 4 secondi fermi sulla scheda: il trailer di Jellyfin; se non c'e', il film stesso da un quarto, solo se e' SDR fino
+  // al 1080p (un film HDR accenderebbe l'HDR del TV sotto le scritte)
+  function preparaTrailer(x) {
+    fermaTrailer();
+    if (!prefs.anteprime || !x.it || x.it.Type === 'Series') return;
+    trailer.timer = setTimeout(function () {
+      if (sch !== x || schermo !== 'scheda' || fermoAperto()) return;
+      function parti(id, da) {
+        chiedi('jf/guarda/' + id, { q: '1080' }).then(function (g) {
+          if (sch !== x || schermo !== 'scheda') return;
+          // il film stesso solo dal file (il server non lavora per un'anteprima); un trailer anche con l'audio convertito
+          if (da ? g.modo !== 'diretto' : g.modo === 'converti') return;
+          var t = $('trailer');
+          trailer.x = x;
+          trailer.sessione = g.modo === 'diretto' ? '' : g.sessione;
+          t.hidden = false;
+          t.muted = true;
+          t.src = serv.base + '/api/video/g/' + serv.gettone + '/' + (g.modo === 'diretto' ? g.url + '&a=0' : g.url);
+          t.onloadedmetadata = function () { if (da && t.duration) { try { t.currentTime = t.duration * da; } catch (e) {} } };
+          t.onplaying = function () { if (trailer.x === x) t.className = 'on'; };
+          t.onended = function () { t.className = ''; };
+          var p = t.play();
+          if (p && p.then) p.then(null, function () {});
+        }, function () {});
+      }
+      if (x.s.trailer) {
+        chiediJf('Items/' + x.id + '/LocalTrailers', { userId: uid() }).then(function (r) { var l = voci(r); if (l[0]) parti(l[0].Id, 0); }, function () {});
+        return;
+      }
+      var ms = JF.sorgente(x.it), v0 = ms ? JF.flussi(ms, 'Video')[0] : null;
+      if (v0 && (+v0.Width || 0) <= 1920 && !/HDR|DOVI|HLG|PQ/i.test(String(v0.VideoRangeType || v0.VideoRange || '')) && JF.strada(x.it, lettiTv()) === 'diretta') parti(x.id, 0.25);
+    }, 4000);
+  }
+  function guardaTrailerJf(x) {
+    chiediJf('Items/' + x.id + '/LocalTrailers', { userId: uid() }).then(function (r) {
+      var l = voci(r);
+      if (!l[0]) { messaggio('Il trailer non c\'e\' su Jellyfin'); return; }
+      guardaJf(l[0], { ritorno: riapriScheda(x), daCapo: true, trailer: true });
+    }, function () { messaggio('Jellyfin non risponde: riprova'); });
+  }
+
+  /* ---------------------------------------------------------- la pagina di una persona */
+
+  function apriPersonaJf(id, indietro) {
+    chiediJf('Items/' + id, { userId: uid() }).then(function (p) {
+      var s = JF.scheda(p), sotto = [s.nascita ? dataBella(s.nascita) : '', s.luogo, s.morte ? '† ' + dataBella(s.morte) : ''].filter(Boolean).join(' · ');
+      apriLibreriaJf({ titolo: s.titolo, persona: { titolo: s.titolo, meta: sotto, trama: s.trama, img: s.img.poster },
+        query: { PersonIds: id, IncludeItemTypes: 'Movie,Series', Recursive: true, SortBy: 'PremiereDate,ProductionYear,SortName', SortOrder: 'Descending' },
+        indietro: indietro || tornaInizio });
+    }, function () { messaggio('Non riesco ad aprire questa persona'); });
+  }
+  var MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  function dataBella(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
+    return m ? (+m[3]) + ' ' + MESI[+m[2] - 1] + ' ' + m[1] : String(d || '');
+  }
+
+  /* ---------------------------------------------------------- una libreria di Jellyfin: la griglia, con ordine e filtri */
+
+  var ORDINI = [{ nome: 'Aggiunti di recente', by: 'DateCreated,SortName', ordine: 'Descending' }, { nome: 'Titolo', by: 'SortName', ordine: 'Ascending' },
+    { nome: 'Anno', by: 'ProductionYear,PremiereDate,SortName', ordine: 'Descending' }, { nome: 'Voto', by: 'CommunityRating,SortName', ordine: 'Descending' },
+    { nome: 'Casuale', by: 'Random', ordine: 'Ascending' }];
+  var FILTRI = [{ nome: 'Tutti', f: '' }, { nome: 'Da vedere', f: 'IsUnplayed' }, { nome: 'Visti', f: 'IsPlayed' }, { nome: 'Preferiti', f: 'IsFavorite' }];
+  // opz: { titolo, vista (una libreria), query (ParentId, PersonIds, Genres...), persona, collezione, indietro }
+  function apriLibreriaJf(opz, sel) {
+    var giro = ++lib.giro, vecchia = lib.jf && lib.opz === opz ? lib.barra : null;
+    clearInterval(dischiTimer);
+    lib = { jf: true, opz: opz, d: '', p: '', voci: [], sel: sel || 0, dom: {}, m: null, giro: giro, tot: 0, pagine: {}, mosso: !!sel,
+      indietro: opz.indietro || tornaInizio, barra: vecchia || { o: opz.persona || opz.collezione ? (opz.persona ? 2 : -1) : 0, f: 0, g: 0, generi: null }, inBarra: false };
+    if (lib.barra.o < 0) lib.barra.o = 0;
+    mostra('libreria');
+    pag = null;
+    $('lib-conta').textContent = 'Apro…';
+    var g0 = $('griglia-dentro');
+    svuota(g0);
+    caricaPaginaJf(0, function () { if (giro === lib.giro) disegnaLibreria(); });
+    // i generi della libreria (per la barra), una volta
+    if (opz.vista && !lib.barra.generi) {
+      chiediJf('Genres', { ParentId: opz.vista.Id, UserId: uid(), SortBy: 'SortName', Limit: 60 }).then(function (r) {
+        if (giro !== lib.giro) return;
+        lib.barra.generi = voci(r).map(function (g) { return String(g.Name || ''); }).filter(Boolean);
+        disegnaBarra();
+      }, function () {});
+    }
+  }
+  function queryLib(da) {
+    var o = {}, q = lib.opz.query || {}, k, b = lib.barra, ord = ORDINI[b.o] || ORDINI[0];
+    for (k in q) if (Object.prototype.hasOwnProperty.call(q, k)) o[k] = q[k];
+    if (lib.opz.vista) {
+      o.ParentId = lib.opz.vista.Id;
+      o.Recursive = true;
+      o.IncludeItemTypes = lib.opz.vista.CollectionType === 'tvshows' ? 'Series' : lib.opz.vista.CollectionType === 'boxsets' ? 'BoxSet' : 'Movie';
+    }
+    if (!lib.opz.collezione || b.o) { o.SortBy = ord.by; o.SortOrder = ord.ordine; }
+    if (FILTRI[b.f] && FILTRI[b.f].f) o.Filters = FILTRI[b.f].f;
+    if (b.g && b.generi && b.generi[b.g - 1]) o.Genres = b.generi[b.g - 1];
+    o.StartIndex = da;
+    o.Limit = 100;
+    return conCampi(o);
+  }
+  // a pagine di 100 (anche con 5000 film: si chiede solo cio' che si vede)
+  function caricaPaginaJf(k, poi) {
+    if (lib.pagine[k]) { if (poi && lib.pagine[k] === true) poi(); return; }
+    lib.pagine[k] = 'in volo';
+    var giro = lib.giro;
+    chiediJf('Items', queryLib(k * 100)).then(function (r) {
+      if (giro !== lib.giro) return;
+      var l = voci(r);
+      lib.tot = typeof r.TotalRecordCount === 'number' ? r.TotalRecordCount : Math.max(lib.tot, k * 100 + l.length);
+      for (var i = 0; i < l.length; i++) lib.voci[k * 100 + i] = { tipo: 'jf', jf: l[i], s: JF.scheda(l[i]), nome: l[i].Name };
+      if (lib.voci.length < lib.tot) lib.voci.length = lib.tot;
+      lib.pagine[k] = true;
+      if (poi) poi(); else if (schermo === 'libreria') finestraGriglia();
+    }, function (e) {
+      if (giro !== lib.giro) return;
+      lib.pagine[k] = false;
+      $('lib-conta').textContent = '';
+      messaggio(e.codice === 'rete' ? 'Jellyfin non risponde: il Mac e\' acceso?' : 'Non riesco ad aprire questa libreria', 4000);
+      if (poi && k === 0) poi();
+    });
+  }
+  function disegnaBarra() {
+    var b = $('lib-barra');
+    svuota(b);
+    b.hidden = !lib.jf;
+    if (!lib.jf) return;
+    var x = lib.barra, chip = [];
+    chip.push('Ordine: ' + (lib.opz.collezione && !x.o ? 'della collezione' : (ORDINI[x.o] || ORDINI[0]).nome));
+    chip.push('Mostra: ' + FILTRI[x.f].nome);
+    if (x.generi && x.generi.length) chip.push('Genere: ' + (x.g ? x.generi[x.g - 1] : 'tutti'));
+    x.n = chip.length;
+    if (x.k === undefined || x.k >= chip.length) x.k = 0;
+    for (var i = 0; i < chip.length; i++) b.appendChild(el('span', 'chip' + (lib.inBarra && i === x.k ? ' sel' : ''), chip[i]));
+  }
+  function tastoBarra(a) {
+    var x = lib.barra;
+    if (a === 'left') { if (x.k > 0) x.k--; }
+    else if (a === 'right') { if (x.k < x.n - 1) x.k++; }
+    else if (a === 'down') { lib.inBarra = false; finestraGriglia(); }
+    else if (a === 'ok') {
+      if (x.k === 0) x.o = (x.o + 1) % ORDINI.length;
+      else if (x.k === 1) x.f = (x.f + 1) % FILTRI.length;
+      else if (x.k === 2 && x.generi) x.g = (x.g + 1) % (x.generi.length + 1);
+      var opz = lib.opz;
+      apriLibreriaJf(opz, 0);
+      lib.inBarra = true;
+      disegnaBarra();
+      return true;
+    }
+    disegnaBarra();
+    return true;
+  }
+
+  /* ---------------------------------------------------------- cerca (tastiera del TV o del telefono) */
+
+  var cerca = { testo: '', filtro: 0, r: null, giro: 0, indietro: null };
+  var FILTRI_CERCA = [{ nome: 'Tutto' }, { nome: 'Film', chiave: 'film' }, { nome: 'Serie', chiave: 'serie' }, { nome: 'Persone', chiave: 'persone' }];
+  function apriCerca(indietro) {
+    if (indietro) cerca.indietro = indietro;
+    clearInterval(dischiTimer);
+    mostra('cerca');
+    sfondo(null);
+    disegnaCerca();
+    if (!cerca.testo) scriviCerca();
+  }
+  function scriviCerca() {
+    HomeTV.chiediTesto({ titolo: 'Cerca film, serie e persone', valore: cerca.testo }).then(function (t) {
+      if (t === null || t === undefined || schermo !== 'cerca') return;
+      cerca.testo = String(t).replace(/\s+/g, ' ').trim().slice(0, 100);
+      cercaOra();
+    });
+  }
+  function cercaOra() {
+    var giro = ++cerca.giro, u = uid(), t = cerca.testo;
+    if (!t) { cerca.r = null; disegnaCerca(); return; }
+    $('cerca-stato').textContent = 'Cerco "' + t + '"…';
+    function lista(tipo) { return chiediJf('Items', conCampi({ searchTerm: t, IncludeItemTypes: tipo, Recursive: true, Limit: 24 })).then(voci, function () { return []; }); }
+    Promise.all([lista('Movie'), lista('Series'), lista('Episode'),
+      chiediJf('Persons', { searchTerm: t, UserId: u, Limit: 24, EnableImageTypes: 'Primary', ImageTypeLimit: 1 }).then(voci, function () { return []; })]).then(function (r) {
+      if (giro !== cerca.giro) return;
+      cerca.r = { film: r[0], serie: r[1], puntate: r[2], persone: r[3] };
+      disegnaCerca();
+    });
+  }
+  function disegnaCerca() {
+    var pp = $('cerca-pulsanti'), righe = $('cerca-righe'), vecchia = pag && pag.corpo === $('cerca-corpo') ? pag : null;
+    svuota(pp);
+    svuota(righe);
+    pp.appendChild(pulsante(cerca.testo ? cerca.testo : 'Scrivi cosa cerchi', 'cerca', scriviCerca));
+    FILTRI_CERCA.forEach(function (f, i) {
+      var b = pulsante(f.nome, '', function () { cerca.filtro = i; disegnaCerca(); });
+      if (i === cerca.filtro) b.className += ' forte';
+      pp.appendChild(b);
+    });
+    nuovaPagina($('cerca-corpo'));
+    aggiungiRiga(pp, vociDi(pp), { sezione: $('cerca-sopra'), chiave: 'campo' });
+    var r = cerca.r, quante = 0, chiave = (FILTRI_CERCA[cerca.filtro] || {}).chiave;
+    function sezione(titolo, k, lista, forma) {
+      if (!lista.length || (chiave && chiave !== k)) return;
+      quante += lista.length;
+      var sz = el('section', 'sezione'), fila = el('div', 'fila');
+      sz.appendChild(el('h2', '', titolo + ' · ' + lista.length));
+      sz.appendChild(fila);
+      righe.appendChild(sz);
+      lista.forEach(function (it) {
+        if (k === 'persone') {
+          var p = el('div', 'persona'), f = el('div', 'foto');
+          f.style.backgroundColor = 'hsl(' + tinta(it.Name) + ',38%,30%)';
+          f.appendChild(el('div', 'ini', iniziali(it.Name)));
+          p.appendChild(f);
+          p.appendChild(el('div', 'pn', String(it.Name || '')));
+          p.setAttribute('data-tv', '');
+          p.addEventListener('click', function () { apriPersonaJf(it.Id, function () { apriCerca(); }); });
+          fila.appendChild(p);
+          var ref = it.ImageTags && it.ImageTags.Primary ? JF.ref(it.Id, 'Primary', it.ImageTags.Primary) : null;
+          if (ref) p.carica = function () { mettiImg(f, '', ref, 180, 180); };
+        } else cartaJf(it, forma, fila, { apri: function () { apriJf(it, { indietro: function () { apriCerca(); } }); } });
+      });
+      aggiungiRiga(fila, vociDi(fila), { sezione: sz, chiave: k });
+    }
+    if (r) {
+      sezione('Film', 'film', r.film, 'poster');
+      sezione('Serie', 'serie', r.serie, 'poster');
+      sezione('Puntate', 'puntate', r.puntate, 'orizzontale');
+      sezione('Persone', 'persone', r.persone);
+    }
+    $('cerca-stato').textContent = !cerca.testo ? 'OK per scrivere: con la tastiera del TV o dal telefono.' : !r ? '' : quante ? '' : 'Niente per "' + cerca.testo + '".';
+    if (vecchia && vecchia.righe[vecchia.r]) {
+      var R0 = vecchia.righe[vecchia.r];
+      for (var i = 0; i < pag.righe.length; i++) if (pag.righe[i].chiave === R0.chiave) { pag.r = i; pag.righe[i].k = Math.min(R0.k, pag.righe[i].voci.length - 1); }
+    }
+    evidenzia();
+  }
+
+  /* ---------------------------------------------------------- collegare Jellyfin: il server, poi il codice dal telefono */
+
+  var coll = { fase: '', timer: null, indietro: null, giro: 0 };
+  function apriCollega(indietro) {
+    if (indietro) coll.indietro = indietro;
+    clearInterval(dischiTimer);
+    mostra('collega');
+    sfondo(null);
+    if (jfAttivo()) collegaGestisci();
+    else if (jf.stato && jf.stato.server) collegaCodice();
+    else collegaCerca();
+  }
+  function collegaPagina(titolo, testo, pulsanti, server) {
+    $('collega-titolo').textContent = titolo;
+    $('collega-testo').textContent = testo;
+    var pp = $('collega-pulsanti'), fs = $('fila-server');
+    svuota(pp);
+    pulsanti.forEach(function (p) { pp.appendChild(pulsante(p.testo, p.ic || '', p.fn, p.piccolo)); });
+    svuota(fs);
+    $('sez-server').hidden = !(server && server.length);
+    (server || []).forEach(function (sv) {
+      var c = el('div', 'carta altro'), q = el('div', 'quadro');
+      c.setAttribute('data-tv', '');
+      q.appendChild(icona(ICONE.jellyfin));
+      q.appendChild(el('div', 'stato', sv.indirizzo.replace(/^https?:\/\//, '')));
+      c.appendChild(q);
+      c.appendChild(el('div', 'nome', sv.nome || 'Jellyfin'));
+      c.addEventListener('click', function () { scegliServerJf(sv.indirizzo); });
+      fs.appendChild(c);
+    });
+    nuovaPagina($('collega-corpo'));
+    if (server && server.length) aggiungiRiga(fs, vociDi(fs), { sezione: $('sez-server'), chiave: 'server' });
+    aggiungiRiga(pp, vociDi(pp), { sezione: $('collega-sopra'), chiave: 'pulsanti' });
+    if (server && server.length) pag.r = 0;
+    evidenzia();
+  }
+  function collegaCerca() {
+    var giro = ++coll.giro;
+    coll.fase = 'cerca';
+    $('qc-codice').hidden = true;
+    var base = [{ testo: 'Scrivi l\'indirizzo', fn: scriviIndirizzo }, { testo: 'Indietro', fn: function () { coll.indietro(); } }];
+    collegaPagina('Collega Jellyfin', 'Cerco Jellyfin nella rete di casa…', base);
+    chiedi('jf/cerca').then(function (r) {
+      if (giro !== coll.giro || schermo !== 'collega') return;
+      var l = r.server || [];
+      collegaPagina('Collega Jellyfin', l.length ? 'Scegli il server. Il Mac (o il computer dove gira Jellyfin) deve essere acceso.' :
+        'Non vedo Jellyfin nella rete di casa. Controlla che sul Mac sia acceso, oppure scrivi il suo indirizzo (per esempio 192.168.1.20:8096).', base, l);
+    }, function (e) {
+      if (giro !== coll.giro) return;
+      collegaPagina('Collega Jellyfin', e.codice === 'assente' || e.codice === 'vecchio' ? 'Il servizio di questo TV non sa ancora parlare con Jellyfin: riavvia il TV per aggiornarlo.' :
+        'Il servizio del TV non risponde: riprova tra poco.', base);
+    });
+  }
+  function scriviIndirizzo() {
+    HomeTV.chiediTesto({ titolo: 'Indirizzo di Jellyfin (es. 192.168.1.20:8096)', valore: '' }).then(function (t) { if (t) scegliServerJf(t); });
+  }
+  function scegliServerJf(indirizzo) {
+    $('collega-testo').textContent = 'Mi collego a ' + indirizzo + '…';
+    chiedi('jf/server', null, { indirizzo: indirizzo }).then(function (r) {
+      jf.stato = r;
+      collegaCodice();
+    }, function (e) {
+      messaggio(e.codice === 'indirizzo' ? 'Indirizzo non valido' : e.codice === 'jellyfin' ? 'A quell\'indirizzo non risponde Jellyfin' :
+        e.codice === 'troppe' ? 'Troppi indirizzi provati: riprova tra qualche minuto' :
+        e.codice === 'rete' ? 'Il server non risponde: e\' acceso?' : 'Non riesco a collegarmi', 5000);
+      $('collega-testo').textContent = 'Riprova, o scrivi un altro indirizzo.';
+    });
+  }
+  // Quick Connect: il codice sul TV, la conferma dal telefono (o dal computer) dove Jellyfin e' gia' aperto
+  function collegaCodice() {
+    var giro = ++coll.giro;
+    coll.fase = 'codice';
+    clearTimeout(coll.timer);
+    var nome = jf.stato && jf.stato.server ? jf.stato.server.nome : 'Jellyfin';
+    var altri = [{ testo: 'Nome e password', fn: collegaPassword }, { testo: 'Cambia server', fn: collegaCerca }, { testo: 'Indietro', fn: function () { coll.giro++; coll.indietro(); } }];
+    $('qc-codice').hidden = true;
+    collegaPagina('Collega ' + nome, 'Preparo il codice…', altri);
+    chiedi('jf/qc', null, {}).then(function (r) {
+      if (giro !== coll.giro || schermo !== 'collega') return;
+      $('qc-codice').textContent = r.codice;
+      $('qc-codice').hidden = false;
+      collegaPagina('Collega ' + nome, 'Sul telefono apri Jellyfin, tocca il tuo profilo, poi Quick Connect, e scrivi questo codice.\n' +
+        'Dal computer: la tua immagine in alto a destra › Quick Connect.', altri);
+      (function controlla() {
+        coll.timer = setTimeout(function () {
+          if (giro !== coll.giro || schermo !== 'collega') return;
+          chiedi('jf/qc').then(function (s) {
+            if (giro !== coll.giro || schermo !== 'collega') return;
+            if (s.stato === 'fatto') { collegato(); return; }
+            if (s.stato === 'scaduto') { collegaCodice(); return; }
+            controlla();
+          }, function () { if (giro === coll.giro) controlla(); });
+        }, 2500);
+      })();
+    }, function (e) {
+      if (giro !== coll.giro) return;
+      collegaPagina('Collega ' + nome, e.codice === 'quickconnect' ? 'Su questo server Quick Connect e\' spento: entra con nome e password (oppure accendilo in Jellyfin › Pannello di controllo › Generale).' :
+        e.codice === 'rete' ? 'Jellyfin non risponde: il Mac e\' acceso?' : 'Non riesco a preparare il codice.', altri);
+    });
+  }
+  function collegaPassword() {
+    coll.giro++;
+    HomeTV.chiediTesto({ titolo: 'Nome utente di Jellyfin', valore: '' }).then(function (nome) {
+      if (!nome) { collegaCodice(); return; }
+      HomeTV.chiediTesto({ titolo: 'Password di ' + nome, valore: '' }).then(function (pw) {
+        if (pw === null || pw === undefined) { collegaCodice(); return; }
+        chiedi('jf/accedi', null, { nome: nome, password: pw }).then(function () { collegato(); }, function (e) {
+          messaggio(e.codice === 'password' ? 'Nome o password sbagliati' : 'Non riesco a entrare', 5000);
+          collegaCodice();
+        });
+      });
+    });
+  }
+  function collegato() {
+    coll.giro++;
+    jfCaricaStato(function () {
+      messaggio(jfAttivo() ? 'Jellyfin collegato: ciao ' + jf.stato.utente.nome + '!' : 'Jellyfin collegato', 4000);
+      jfCaricaInizio(true);
+      apriInizio('tieni');
+    });
+  }
+  function collegaGestisci() {
+    var st = jf.stato, giro = ++coll.giro;
+    coll.fase = 'gestisci';
+    $('qc-codice').hidden = true;
+    collegaPagina('Jellyfin', 'Collegato a ' + st.server.nome + ' (' + st.server.indirizzo.replace(/^https?:\/\//, '') + ', versione ' + st.server.versione + ') come ' +
+      st.utente.nome + '.\nIl collegamento lo tiene il servizio del TV: l\'app non vede mai la chiave di Jellyfin.', [
+      { testo: 'Indietro', fn: function () { coll.indietro(); } },
+      { testo: 'Scollega', fn: function () {
+        chiedi('jf/esci', null, {}).then(function (r) { if (giro !== coll.giro) return; jf.stato = r; jf.dati = null; messaggio('Jellyfin scollegato'); apriInizio('tieni'); },
+          function () { messaggio('Non riesco a scollegare: riprova'); });
+      } },
+      { testo: 'Cambia server', fn: collegaCerca }]);
+  }
+
   /* ============================================================ una cartella: la griglia delle copertine
    * Si disegnano solo le righe vicine a quella scelta (anche con 3000 video); le frecce le gestisce l'app. */
 
@@ -658,7 +1574,7 @@
       var voci = [];
       (r.cartelle || []).forEach(function (c) { voci.push({ tipo: 'cartella', nome: c.nome, p: unisci(p, c.nome) }); });
       (r.video || []).forEach(function (v) { voci.push({ tipo: 'video', nome: v.nome, p: unisci(p, v.nome), dim: v.dim, data: v.data }); });
-      lib = { d: d, p: p, voci: voci, sel: 0, dom: {}, m: null, giro: giro, troppi: !!r.troppi, sotto: r.sotto || [], video: r.video || [] };
+      lib = { d: d, p: p, voci: voci, sel: 0, dom: {}, m: null, giro: giro, troppi: !!r.troppi, sotto: r.sotto || [], video: r.video || [], jf: false };
       for (var i = 0; i < voci.length; i++) if (scegliNome && voci[i].nome === scegliNome) lib.sel = i;
       mostra('libreria');
       pag = null;
@@ -684,6 +1600,17 @@
     lib.m = misureGriglia();
     var bric = $('briciole'), parti = lib.p ? lib.p.split('/') : [];
     svuota(bric);
+    disegnaBarra();
+    if (lib.jf) {
+      bric.appendChild(el('b', '', lib.opz.titolo || 'Jellyfin'));
+      $('lib-conta').textContent = lib.tot ? lib.tot + (lib.tot === 1 ? ' titolo' : ' titoli') : '';
+      $('vuoto-cartella').textContent = lib.barra.f || lib.barra.g ? 'Niente con questi filtri.' : 'Qui non c\'è niente.';
+      $('vuoto-cartella').hidden = lib.tot > 0;
+      if (!lib.tot) { $('ls-titolo').textContent = lib.opz.titolo || ''; svuota($('ls-meta')); $('ls-trama').textContent = ''; sfondo(null); }
+      finestraGriglia();
+      return;
+    }
+    $('vuoto-cartella').textContent = 'Qui non ci sono video.';
     // solo le ultime due parti: la cartella dove sei si legge sempre
     var mostrate = [nomeDisco(lib.d)].concat(parti);
     if (mostrate.length > 3) mostrate = ['…'].concat(mostrate.slice(-2));
@@ -727,9 +1654,15 @@
       var r = Math.floor(+k / m.col);
       if (r < da || r > a) { var t0 = lib.dom[k]; if (t0.parentNode) t0.parentNode.removeChild(t0); delete lib.dom[k]; }
     }
-    for (var r2 = da; r2 <= a; r2++) for (var c = 0; c < m.col; c++) { i = r2 * m.col + c; if (i < lib.voci.length && !lib.dom[i]) tile(i); }
+    for (var r2 = da; r2 <= a; r2++) {
+      for (var c = 0; c < m.col; c++) {
+        i = r2 * m.col + c;
+        // Jellyfin: le voci arrivano a pagine; quelle che mancano si chiedono adesso
+        if (i < lib.voci.length && !lib.dom[i]) { if (lib.voci[i]) tile(i); else if (lib.jf) caricaPaginaJf(Math.floor(i / 100)); }
+      }
+    }
     $('griglia-dentro').style.transform = 'translateY(' + (-Math.round(rs * m.th)) + 'px)';
-    for (var j in lib.dom) if (Object.prototype.hasOwnProperty.call(lib.dom, j)) lib.dom[j].className = 'tile' + (+j === lib.sel ? ' sel' : '');
+    for (var j in lib.dom) if (Object.prototype.hasOwnProperty.call(lib.dom, j)) lib.dom[j].className = 'tile' + (+j === lib.sel && !lib.inBarra ? ' sel' : '');
     sceltaLibreria();
   }
   function tile(i) {
@@ -737,6 +1670,7 @@
     t.style.left = Math.round((i % m.col) * (m.tw + m.gx)) + 'px';
     t.style.top = Math.round(Math.floor(i / m.col) * m.th) + 'px';
     t.setAttribute('data-tv', '');
+    if (v.jf) return tileJf(i, v, t, cop);
     var tt = titoloDi(v.nome);
     cop.appendChild(finta(v.tipo === 'cartella' ? v.nome : tt.titolo, v.tipo === 'cartella' ? '' : tt.episodio ? 'S' + tt.stagione + ' E' + tt.episodio : tt.anno, v.tipo === 'cartella' ? 'cartella' : tt.episodio ? 'puntata' : 'film'));
     t.appendChild(cop);
@@ -766,6 +1700,21 @@
     });
     return t;
   }
+  function tileJf(i, v, t, cop) {
+    var s = v.s, m = lib.m;
+    cop.appendChild(finta(s.titolo, s.anno || '', s.tipo === 'serie' ? 'serie' : s.tipo === 'collezione' ? 'cartella' : 'film'));
+    if (s.visto && s.tipo !== 'serie') { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); cop.appendChild(vs); }
+    else if (s.percento > 0 && s.percento < 100) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.round(s.percento) + '%'; b.appendChild(f); cop.appendChild(b); }
+    else if (s.tipo === 'serie' && s.nonVisti) cop.appendChild(el('div', 'cartella-segno', String(s.nonVisti)));
+    t.appendChild(cop);
+    t.appendChild(el('div', 'nome', s.titolo));
+    t.appendChild(el('div', 'sotto', sottoJf(s)));
+    t.addEventListener('click', function () { lib.sel = i; lib.inBarra = false; finestraGriglia(); apriVoce(i); });
+    $('griglia-dentro').appendChild(t);
+    lib.dom[i] = t;
+    if (s.img.poster) mettiImg(cop, '', s.img.poster, m.pw, m.ph, false, function (si) { var f0 = cop.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
+    return t;
+  }
   // visto (spunta) o a meta' (barra)
   function segniVisto(box, v) {
     var pt = puntoDi(lib.d, v.p, v.dim);
@@ -777,6 +1726,23 @@
   var sceltaTimer = null;
   function sceltaLibreria() {
     var v = lib.voci[lib.sel];
+    if (lib.jf) {
+      // la pagina di una persona: lei in alto finche' non ci si muove
+      var pe = lib.opz.persona;
+      if (pe && !lib.mosso) {
+        $('ls-titolo').textContent = pe.titolo;
+        $('ls-meta').textContent = pe.meta || '';
+        $('ls-trama').textContent = pe.trama || '';
+        sfondo('', pe.img || null, false);
+        return;
+      }
+      if (!v) return;
+      $('ls-titolo').textContent = v.s.titolo;
+      metaDi($('ls-meta'), v.s, null, v.s.tipo === 'serie' ? 'Serie' : v.s.tipo === 'collezione' ? 'Collezione' : '');
+      $('ls-trama').textContent = v.s.trama;
+      sfondo('', v.s.img.fanart || v.s.img.poster || null, false);
+      return;
+    }
     if (!v) return;
     var s = v.scheda, tt = titoloDi(v.nome);
     $('ls-titolo').textContent = s && s.titolo ? (s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo) : v.tipo === 'cartella' ? v.nome : tt.titolo;
@@ -792,7 +1758,9 @@
     }
   }
   function tastoLibreria(a) {
+    if (lib.jf && lib.inBarra) return tastoBarra(a);
     var m = lib.m;
+    if (lib.jf && a === 'up' && (!lib.voci.length || lib.sel < (m ? m.col : 1))) { lib.inBarra = true; disegnaBarra(); if (m) finestraGriglia(); return true; }
     if (!m || !lib.voci.length) return a === 'up' || a === 'down' || a === 'left' || a === 'right';
     var i = lib.sel, n = lib.voci.length;
     if (a === 'left') { if (i % m.col > 0) i--; }
@@ -800,15 +1768,18 @@
     else if (a === 'up') { if (i - m.col >= 0) i -= m.col; }
     else if (a === 'down') { if (i + m.col < n) i += m.col; else if (Math.floor(i / m.col) < Math.floor((n - 1) / m.col)) i = n - 1; }
     else if (a === 'ok') { apriVoce(i); return true; }
-    else if (a === 'play') { var v = lib.voci[i]; if (v && v.tipo === 'video') guardaVoce(v); else apriVoce(i); return true; }
+    else if (a === 'play') { var v = lib.voci[i]; if (v && (v.tipo === 'video' || (v.jf && /^(Movie|Episode|Video)$/.test(v.jf.Type)))) guardaVoce(v); else apriVoce(i); return true; }
     else return false;
-    if (i !== lib.sel) { lib.sel = i; finestraGriglia(); }
+    if (i !== lib.sel) { lib.sel = i; lib.mosso = true; finestraGriglia(); }
     return true;
   }
+  // per tornare a questa libreria di Jellyfin, sulla stessa copertina
+  function riapriLibreria() { var o = lib.opz, sel = lib.sel; return function () { apriLibreriaJf(o, sel); }; }
   // OK su una copertina: la cartella di un film o di una serie apre la sua scheda; un video la sua; le altre si aprono
   function apriVoce(i) {
     var v = lib.voci[i];
     if (!v) return;
+    if (v.jf) { apriJf(v.jf, { indietro: riapriLibreria() }); return; }
     if (v.tipo === 'video') { apriScheda(lib.d, v.p, { da: 'libreria', video: true }); return; }
     function decidi(s) {
       if (s && s.cartellaFilm && s.video) apriScheda(lib.d, unisci(v.p, s.video), { da: 'libreria', cartellaFilm: v.p, video: true });
@@ -818,6 +1789,7 @@
     if (v.scheda) decidi(v.scheda); else chiediScheda(lib.d, v.p, false, decidi);
   }
   function guardaVoce(v) {
+    if (v.jf) { guardaJf(v.jf, { ritorno: riapriLibreria(), t: riprendibileJf(v.s) ? v.s.punto : 0 }); return; }
     var pt = puntoDi(lib.d, v.p, v.dim);
     apriVideo({ d: lib.d, p: v.p, nome: v.nome, dim: v.dim }, { vicini: lib.video.slice(), cartella: lib.p, sotto: lib.sotto, ritorno: 'libreria', t: riprendibile(pt) ? pt.t : -1 });
   }
@@ -931,6 +1903,17 @@
     riga('Studio', (s.studi || []).join(', '));
     if (info) riga('File', x.p.split('/').pop() + ' · ' + peso(info.dim) + (info.mbps ? ' · ' + String(info.mbps).replace('.', ',') + ' Mbps' : ''));
     var avv = info ? avvisoDi(info) : '';
+    // il TV non sente questo film: lo stesso su Jellyfin si sente (il Mac converte l'audio)
+    if (info && info.avvisi.indexOf('audio') !== -1) {
+      if (!jfAttivo()) avv = avv.replace(/ Si potrà sentire.*$/, ' Con Jellyfin sul Mac si sente: il Mac converte l\'audio (Altro › Collega Jellyfin).');
+      else if (x.gemello === undefined) {
+        x.gemello = null;
+        cercaGemelloJf(s, info, x.p, function (it) { if (sch === x) { x.gemello = it || false; disegnaScheda(x); } });
+      } else if (x.gemello) {
+        avv = avv.replace(/ Si potrà sentire.*$/, ' Su Jellyfin c\'è lo stesso film: "Guarda da Jellyfin" lo fa sentire (il Mac converte l\'audio).');
+        pp.insertBefore(pulsante('Guarda da Jellyfin', 'jellyfin', function () { guardaJf(x.gemello, { ritorno: 'scheda' }); }, 'con l\'audio'), pp.firstChild);
+      } else if (x.gemello === false) avv = avv.replace(/ Si potrà sentire.*$/, ' Su Jellyfin non trovo lo stesso film: aggiungilo alla libreria di Jellyfin e il Mac ne convertirà l\'audio.');
+    }
     $('sc-avviso').textContent = avv;
     $('sc-avviso').hidden = !avv;
     sfondo(d, s.img.fanart || s.img.landscape || (s.serie && s.serie.img && s.serie.img.fanart) || s.img.poster, true, true);
@@ -953,9 +1936,10 @@
       p.appendChild(f);
       p.appendChild(el('div', 'pn', c.nome));
       p.appendChild(el('div', 'pr', c.ruolo || ''));
-      p.addEventListener('click', function () {});
+      p.setAttribute('data-tv', '');
+      p.addEventListener('click', function () { if (x.jf && c.id) apriPersonaJf(c.id, riapriScheda(x)); });
       fila.appendChild(p);
-      if (c.foto) mettiImg(f, x.d, c.foto, 180, 180);
+      if (c.foto) mettiImg(f, x.d || '', c.foto, 180, 180);
     });
   }
   // una serie (o una sua stagione): le stagioni, le puntate della stagione scelta, Riprendi la puntata giusta
@@ -1105,7 +2089,7 @@
     }
     var a = null, num = audio !== undefined ? audio : (info.scelta || {}).audio;
     for (var i = 0; i < info.audio.length; i++) if (info.audio[i].num === num) a = info.audio[i];
-    if (a) out.push({ t: a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') });
+    if (a) out.push({ t: a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') + (a.server ? ' · convertito' : ''), conv: !!a.server });
     else if (info.audio.length) out.push({ t: 'AUDIO NON LETTO', no: true });
     if (info.sotto.length) out.push({ t: 'SOTTOTITOLI' });
     return out;
@@ -1137,19 +2121,19 @@
     var x = L = { voce: voce, info: o.info || null, audio: 0, sotto: null, eventi: [], completi: false, chiesto: -1,
       vicini: o.vicini || null, cartella: o.cartella !== undefined && o.cartella !== null ? o.cartella : voce.p.replace(/\/?[^\/]*$/, ''),
       esterni: o.sotto || [], partito: false, riprendiFino: 0, guardato: 0, ultimoT: -1, velocita: 1, fineConto: 0, errori: 0,
-      ritardo: 0, ritorno: o.ritorno || 'inizio', saltato: {} };
+      ritardo: 0, ritorno: o.ritorno || 'inizio', saltato: {}, jf: null };
     mostra('lettore');
-    $('osd-titolo').textContent = etichetta(voce.nome);
+    $('osd-titolo').textContent = voce.jf ? titoloJf(voce.jf) : etichetta(voce.nome);
     pulisciLettore();
     attesa(true);
-    var info = x.info ? Promise.resolve(x.info) : chiedi('info', { d: voce.d, p: voce.p, lingue: lingueDi(voce) });
-    var vicini = x.vicini || !o.conVicini ? Promise.resolve(null) :
+    var info = x.info ? Promise.resolve(x.info) : voce.jf ? infoJf(x, o) : chiedi('info', { d: voce.d, p: voce.p, lingue: lingueDi(voce) });
+    var vicini = voce.jf || x.vicini || !o.conVicini ? Promise.resolve(null) :
       chiedi('cartella', { d: voce.d, p: x.cartella }).then(function (c) { x.vicini = c.video || []; x.esterni = c.sotto || []; }, function () {});
     Promise.all([info, vicini]).then(function (r) {
       var i = r[0];
       if (L !== x) return;
       x.info = i;
-      chiediScheda(voce.d, voce.p, false, function (s) { if (L === x && s && s.titolo) $('osd-titolo').textContent = s.tipo === 'puntata' && s.serie ? s.serie.titolo + ' · S' + s.stagione + ' E' + s.episodio + ' · ' + s.titolo : s.titolo + (s.anno ? ' (' + s.anno + ')' : ''); });
+      if (!voce.jf) chiediScheda(voce.d, voce.p, false, function (s) { if (L === x && s && s.titolo) $('osd-titolo').textContent = s.tipo === 'puntata' && s.serie ? s.serie.titolo + ' · S' + s.stagione + ' E' + s.episodio + ' · ' + s.titolo : s.titolo + (s.anno ? ' (' + s.anno + ')' : ''); });
       if (i.avvisi.indexOf('video') !== -1) {
         attesa(false);
         fermo('Il TV non legge questo video', avvisoDi(i), [{ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
@@ -1159,10 +2143,12 @@
       scegliSottotitoliIniziali(x, o.sottoScelto);
       disegnaBadgeOsd();
       if (i.avvisi.indexOf('audio') !== -1) avvisoLettore(avvisoDi(i), 9000);
-      var pt = punti[chiaveDi(voce.p, voce.dim)];
+      var pt = voce.jf ? null : punti[chiaveDi(voce.p, voce.dim)];
       var da = riprendibile(pt, i.durata) ? pt.t : 0;
       // dalla scheda o dalla home: il punto che si vedeva li'
       if (o.t >= 0) da = o.t > 60 && (!i.durata || o.t < i.durata - 120) ? o.t : 0;
+      // Jellyfin: il punto lo tiene il server (deciso in infoJf)
+      if (voce.jf) da = x.jfDa || 0;
       if (o.daCapo) da = 0;
       carica(da);
       if (da) {
@@ -1170,12 +2156,19 @@
         avvisoLettore('Riprendo da ' + tempo(da) + ' · Giù per ricominciare da capo', 9000);
       }
       clearInterval(salvaTimer);
-      salvaTimer = setInterval(function () { if (L === x && !v.paused) salvaPunto(false); }, 10000);
+      salvaTimer = setInterval(function () {
+        if (L !== x) return;
+        if (!v.paused) salvaPunto(false);
+        // in pausa con l'HLS del server: la conversione resta viva (se no Jellyfin la chiude e il film non riparte)
+        else if (x.jf && (x.jf.modo === 'copia' || x.jf.modo === 'converti') && x.jf.sessione) chiediJf('Sessions/Playing/Ping', { playSessionId: x.jf.sessione }, {}).then(null, function () {});
+      }, 10000);
     }, function (e) {
       if (L !== x) return;
       attesa(false);
       fermo('Non riesco ad aprire questo video', e.codice === 'disco' ? 'La chiavetta non c\'è più.' : e.codice === 'permesso' ?
         'Il TV non lascia leggere questo file.' : e.codice === 'lento' || e.codice === 'servizio' ? 'Il servizio del TV non risponde: riprova tra poco.' :
+        e.codice === 'rete' ? 'Jellyfin non risponde: il Mac è acceso?' : e.codice === 'accesso' ? 'Jellyfin chiede di collegarsi di nuovo (Altro › Jellyfin).' :
+        e.codice === 'formato' && voce.jf ? 'Jellyfin non sa preparare questo film per il TV.' :
         'Il file non si legge.', [{ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
     });
   }
@@ -1190,7 +2183,7 @@
       dopoPlay = function () { v.removeEventListener('playing', dopoPlay); dopoPlay = null; v.pause(); };
       v.addEventListener('playing', dopoPlay);
     }
-    v.src = urlFile(x.voce.d, x.voce.p, x.voce.nome, x.audio);
+    v.src = x.jf ? urlJf(x) : urlFile(x.voce.d, x.voce.p, x.voce.nome, x.audio);
     v.playbackRate = 1;
     x.velocita = 1;
     applicaSchermo();
@@ -1208,6 +2201,7 @@
   v.addEventListener('playing', function () {
     attesa(false);
     if (L) { L.partito = true; L.errori = 0; } // riparte: le prove dopo un errore ricominciano da zero
+    if (L && L.jf) riportaJf('inizio');
     if (L) salvaPunto(false); // il telefono vede subito che il video va
     nascondiOsdPresto();
   });
@@ -1286,6 +2280,7 @@
     $('osd-ora').textContent = tempo(t);
     var resta = Math.max(0, d - t) / Math.max(0.25, L.velocita || 1);
     $('osd-resta').textContent = d ? '-' + tempo(d - t) + ' · ' + finisceAlle(resta) : '';
+    anteprimaBarra(salto.tot ? t : -1, f);
     var meta = $('osd-meta');
     if (salto.tot) {
       meta.hidden = false;
@@ -1297,7 +2292,7 @@
     var b = $('osd-badge');
     svuota(b);
     if (!L || !L.info) return;
-    badgeDi(L.info, L.audio).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.forte ? ' forte' : '') + (x.no ? ' no' : ''), x.t)); });
+    badgeDi(L.info, L.audio).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.forte ? ' forte' : '') + (x.no ? ' no' : '') + (x.conv ? ' conv' : ''), x.t)); });
   }
   var centroTimer = null;
   function centro(nome) {
@@ -1343,18 +2338,232 @@
     mostraOsd();
   }
 
+  /* ---------------------------------------------------------- il lettore con Jellyfin
+   * La strada la sceglie il servizio (jf/guarda): "diretto" = il file vero passa dal "vuoto" come una chiavetta (tracce,
+   * capitoli e sottotitoli li legge il servizio); "copia" = HLS di Jellyfin col video originale e l'audio convertito;
+   * "converti" = HLS rifatto dal server. Il punto lo tiene Jellyfin (Sessions/Playing, Progress, Stopped). */
+
+  var QUALITA_JF = [{ id: 'orig', nome: 'Originale' }, { id: 'auto', nome: 'Automatica', piccolo: 'misura la rete' },
+    { id: '4k', nome: '4K', piccolo: 'fino a 80 Mbps' }, { id: '1080', nome: '1080p', piccolo: '20 Mbps' }, { id: '720', nome: '720p', piccolo: '8 Mbps' }];
+  var NOMI_COD = { EAC3: 'Dolby Digital Plus', AC3: 'Dolby Digital', TRUEHD: 'Dolby TrueHD', DTS: 'DTS', AAC: 'AAC', FLAC: 'FLAC', OPUS: 'Opus',
+    MP3: 'MP3', MP2: 'MPEG audio', PCM: 'PCM', VORBIS: 'Vorbis', HEVC: 'HEVC', AVC: 'H.264', AV1: 'AV1', VP9: 'VP9', VP8: 'VP8', MPEG2: 'MPEG-2',
+    MPEG4: 'MPEG-4', VC1: 'VC-1', SRT: 'Testo', ASS: 'Testo (ASS)', VTT: 'Testo (WebVTT)', PGS: 'Immagini (PGS)', VOBSUB: 'Immagini (DVD)', TX3G: 'Testo' };
+  var LINGUE3 = { it: 'ita', en: 'eng', de: 'ger', deu: 'ger', fr: 'fre', fra: 'fre', es: 'spa', pt: 'por', ja: 'jpn', zh: 'chi', zho: 'chi',
+    ru: 'rus', nl: 'dut', nld: 'dut', sv: 'swe', pl: 'pol', ko: 'kor', ar: 'ara', tr: 'tur', el: 'gre', ell: 'gre', da: 'dan', fi: 'fin',
+    no: 'nor', nb: 'nor', cs: 'cze', ces: 'cze', hu: 'hun', ro: 'rum', ron: 'rum', he: 'heb', hi: 'hin', th: 'tha', uk: 'ukr' };
+  function lingua3(l) { l = String(l || '').toLowerCase().split('-')[0]; return LINGUE3[l] || l || 'und'; }
+  function hdrDi(r) { r = String(r || ''); return /DOVI/i.test(r) ? 'DV' : /HDR10Plus/i.test(r) ? 'HDR10+' : /HDR|PQ/i.test(r) ? 'HDR10' : /HLG/i.test(r) ? 'HLG' : ''; }
+  var MOTIVI = { AudioCodecNotSupported: 'audio non letto dal TV', VideoCodecNotSupported: 'video non letto dal TV', ContainerNotSupported: 'contenitore',
+    ContainerBitrateExceedsLimit: 'troppi Mbps per la qualità scelta', VideoBitrateNotSupported: 'troppi Mbps per la qualità scelta',
+    VideoResolutionNotSupported: 'risoluzione oltre la qualità scelta', AudioChannelsNotSupported: 'canali audio', SubtitleCodecNotSupported: 'sottotitoli',
+    VideoRangeTypeNotSupported: 'HDR non letto', VideoLevelNotSupported: 'livello del video', VideoProfileNotSupported: 'profilo del video' };
+  function motivoBello(m) { return MOTIVI[m] || m; }
+  function titoloJf(it) {
+    var s = JF.scheda(it);
+    if (s.tipo === 'puntata' && s.serie) return s.serie.titolo + ' · S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '');
+    return s.titolo + (s.anno ? ' (' + s.anno + ')' : '');
+  }
+  // guardare un film o una puntata di Jellyfin. o: { t (secondi), daCapo, ritorno (funzione o 'esci'), trailer }
+  function guardaJf(it, o) {
+    o = o || {};
+    fermaTrailer();
+    apriVideo({ jf: it, nome: String(it.Name || ''), d: '', p: 'jf:' + it.Id, dim: 0 }, { ritorno: o.ritorno || tornaInizio, t: o.t, daCapo: o.daCapo, trailer: o.trailer });
+  }
+  // lo stesso film (o la stessa puntata) su Jellyfin, per un file della chiavetta che il TV non sente: prima lo stesso file
+  // (nome o misura), poi stesso titolo e anno (o stessa serie, stagione e puntata)
+  function cercaGemelloJf(s, info, p, cb) {
+    var nome = String(p).split('/').pop(), t = titoloDi(nome), puntata = s.tipo === 'puntata' || !!t.episodio;
+    var titolo = puntata ? (s.serie && s.serie.titolo) || t.titolo : s.titolo || t.titolo, anno = s.anno || t.anno;
+    var st = s.stagione || t.stagione, ep = s.episodio >= 0 && s.tipo === 'puntata' ? s.episodio : t.episodio;
+    function stesso(l) {
+      for (var i = 0; i < l.length; i++) {
+        var ms = JF.sorgente(l[i]) || {}, base = String(ms.Path || '').split(/[\/\\]/).pop();
+        if ((ms.Size && ms.Size === info.dim) || (base && base === nome)) return l[i];
+      }
+      return null;
+    }
+    if (!titolo) { cb(null); return; }
+    if (!puntata) {
+      chiediJf('Items', conCampi({ searchTerm: titolo, IncludeItemTypes: 'Movie', Recursive: true, Limit: 20, Fields: JF.CAMPI + ',MediaSources' })).then(function (r) {
+        var l = voci(r);
+        cb(stesso(l) || l.filter(function (it) { return !anno || !it.ProductionYear || Math.abs(it.ProductionYear - anno) <= 1; })[0] || null);
+      }, function () { cb(null); });
+      return;
+    }
+    chiediJf('Items', conCampi({ searchTerm: titolo, IncludeItemTypes: 'Series', Recursive: true, Limit: 5 })).then(function (r) {
+      var serie = voci(r)[0];
+      if (!serie || !st || !ep) { cb(null); return; }
+      chiediJf('Shows/' + serie.Id + '/Episodes', conCampi({ UserId: uid(), Season: st, Fields: JF.CAMPI + ',MediaSources' })).then(function (r2) {
+        var l = voci(r2);
+        cb(stesso(l) || l.filter(function (it) { return +it.IndexNumber === ep; })[0] || null);
+      }, function () { cb(null); });
+    }, function () { cb(null); });
+  }
+  function infoJf(x, o) {
+    var it = x.voce.jf, j = x.jf = { id: it.Id, it: it, q: o.trailer ? 'orig' : prefs.qualita || 'orig', mbps: 0, segmenti: [], tp: null, sessione: '', modo: '',
+      ms: '', url: '', g: null, partito: false, prossimo: null, trailer: !!o.trailer };
+    // la scheda intera (capitoli, anteprime della barra, serie) se si e' partiti da una voce corta
+    var pieno = it.Chapters !== undefined && it.MediaSources ? Promise.resolve(it) : chiediJf('Items/' + it.Id, { userId: uid() });
+    return pieno.then(function (itp) {
+      j.it = itp;
+      x.voce.nome = String(itp.Name || x.voce.nome);
+      if (L === x) $('osd-titolo').textContent = titoloJf(itp);
+      var s = JF.scheda(itp);
+      x.jfDa = o.daCapo ? 0 : o.t > 0 ? o.t : riprendibileJf(s) ? s.punto : 0;
+      if (j.q === 'auto') return chiedi('jf/veloce').then(function (r) { j.mbps = r.mbps; }, function () { j.q = 'orig'; });
+    }).then(function () { return stradaJf(x, x.jfDa); }).then(function (info) {
+      if (L !== x) return info;
+      chiediJf('MediaSegments/' + j.id, {}).then(function (r) { if (L === x) j.segmenti = JF.segmenti(r); }, function () {});
+      j.tp = JF.trickplay(j.it, j.ms);
+      if (j.it.Type === 'Episode' && j.it.SeriesId) {
+        chiediJf('Shows/' + j.it.SeriesId + '/Episodes', conCampi({ UserId: uid(), StartItemId: j.id, Limit: 2 })).then(function (r) {
+          var l = voci(r);
+          if (L === x && l[0] && l[0].Id === j.id && l[1]) j.prossimo = l[1];
+        }, function () {});
+      }
+      return info;
+    });
+  }
+  // la strada e le tracce per il pannello, nella forma delle chiavette (a: l'audio voluto, indice di Jellyfin)
+  function stradaJf(x, t, a) {
+    var j = x.jf, q = { q: j.q, t: Math.round(t || 0), ms: j.ms || undefined };
+    if (j.q === 'auto') q.mbps = j.mbps || undefined;
+    if (a !== undefined && a !== null) q.a = a;
+    return chiedi('jf/guarda/' + j.id, q).then(function (g) {
+      j.g = g;
+      j.modo = g.modo;
+      j.url = g.url;
+      j.ms = g.ms;
+      j.sessione = g.sessione;
+      j.partito = false;
+      var mkv = /^(mkv|webm|matroska)/i.test(g.contenitore || '');
+      // le tracce e i sottotitoli dentro il file li legge il servizio dal file vero (anche quando il video arriva in HLS)
+      var nostra = g.modo === 'diretto' || mkv ? chiedi('jf/info/' + j.id, { ms: g.ms, lingue: prefs.lingue.join(',') }).then(null, function () { return null; }) : Promise.resolve(null);
+      return nostra.then(function (i) {
+        var info;
+        if (g.modo === 'diretto' && i) {
+          info = i;
+          if (a !== undefined && a !== null) { var t0 = i.audio.filter(function (z) { return z.ordine === a; })[0]; if (t0) info.scelta = { audio: t0.num }; }
+        } else {
+          info = { nome: x.voce.nome, dim: g.dim, formato: g.contenitore, durata: g.durata / 1000, titolo: '', avvisi: [], capitoli: [],
+            video: g.video ? { codec: g.video.codec, nomeCodec: NOMI_COD[g.video.codec] || g.video.codec, largh: g.video.largh, alt: g.video.alt, hdr: hdrDi(g.video.hdr), letto: true } : null,
+            audio: g.audio.map(function (z) {
+              return { num: z.indice, ordine: z.indice, codec: z.codec, nomeCodec: NOMI_COD[z.codec] || z.codec, lingua: lingua3(z.lingua), nome: z.nome,
+                canali: z.canali, predefinita: z.predefinita, letto: true, server: !z.letto };
+            }), sotto: i ? i.sotto : [], scelta: { audio: g.audioScelto } };
+        }
+        info.durata = info.durata || g.durata / 1000;
+        if (g.mbps) info.mbps = g.mbps;
+        var cap = JF.capitoli(j.it);
+        if (cap.length > 1) info.capitoli = cap;
+        // i sottotitoli che da' Jellyfin: quelli accanto al film, e tutti se il file non e' un MKV
+        info.esterniJf = g.sotto.filter(function (z) { return (z.esterno || !mkv) && /^(SRT|ASS|VTT|TX3G)$/.test(z.codec); }).map(function (z) {
+          return { indice: z.indice, lingua: lingua3(z.lingua), nome: z.nome, forzata: z.forzata };
+        });
+        return info;
+      });
+    });
+  }
+  function urlJf(x) {
+    var j = x.jf, b = serv.base + '/api/video/g/' + serv.gettone + '/';
+    if (j.modo !== 'diretto') return b + j.url;
+    // il nome col suo tipo nell'indirizzo, come per le chiavette
+    var ms = JF.sorgente(j.it), nome = String(ms && ms.Path || 'video.mkv').split(/[\/\\]/).pop().replace(/[?#%]/g, '_');
+    return b + 'jf/file/' + j.id + '/' + encodeURIComponent(nome) + '?ms=' + j.ms + '&a=' + (x.audio || 0);
+  }
+  // a Jellyfin: si guarda (inizio), a che punto (avanti, ogni 10 s e a pausa e salti), smesso (fine)
+  function riportaJf(evento, t) {
+    var x = L, j = x && x.jf;
+    if (!j || !j.sessione) return;
+    if (evento === 'inizio') { if (j.partito) evento = 'avanti'; j.partito = true; }
+    else if (!j.partito) return;
+    var corpo = { ItemId: j.id, MediaSourceId: j.ms, PlaySessionId: j.sessione, PositionTicks: JF.ticks(t !== undefined ? t : v.currentTime),
+      IsPaused: !!v.paused, IsMuted: false, CanSeek: true, PlayMethod: j.modo === 'diretto' || j.modo === 'file' ? 'DirectPlay' : j.modo === 'copia' ? 'DirectStream' : 'Transcode' };
+    if (j.modo !== 'diretto') corpo.AudioStreamIndex = x.audio;
+    if (evento === 'fine') j.partito = false;
+    chiediJf(evento === 'inizio' ? 'Sessions/Playing' : evento === 'fine' ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress', null, corpo).then(null, function () {});
+  }
+  // la home mostra anche i film di Jellyfin in Continua a guardare (la scheda li riapre qui, con l'ancora #/jf/<id>)
+  function puntoJf(x, t, d, fine, chiuso) {
+    riportaJf(fine || chiuso ? 'fine' : 'avanti', fine ? d : t);
+    if (x.jf.trailer) return;
+    var s = JF.scheda(x.jf.it), puntata = s.tipo === 'puntata';
+    chiedi('punto', null, { jf: x.jf.id, titolo: puntata && s.serie ? s.serie.titolo : s.titolo, anno: puntata ? 0 : s.anno, stagione: puntata ? s.stagione : 0,
+      episodio: puntata ? s.episodio : 0, posizione: Math.round(fine ? d : t), durata: Math.round(d), guardato: Math.round(x.guardato), inPausa: v.paused,
+      chiuso: !!chiuso || !!fine, app: String(location.href).split('#')[0] }).then(null, function () {});
+  }
+  // una conversione del server che non serve piu' (si cambia qualita' o audio, si esce): si ferma subito
+  function fermaConversione(j) {
+    if (!j || j.modo === 'diretto' || j.modo === 'file' || !j.sessione) return;
+    chiediJf('Videos/ActiveEncodings', { PlaySessionId: j.sessione }, null, 'DELETE').then(null, function () {});
+  }
+  // stesso film, altra strada (audio o qualita' cambiati): dallo stesso punto, in pausa se lo era
+  function ricaricaJf(opz) {
+    var x = L;
+    if (!x || !x.jf) return;
+    var t = v.currentTime || x.daQui || 0, pausa = v.paused, vecchio = { modo: x.jf.modo, sessione: x.jf.sessione };
+    riportaJf('fine', t);
+    attesa(true);
+    stradaJf(x, t, opz.a).then(function (info) {
+      if (L !== x) return;
+      fermaConversione(vecchio);
+      x.info = info;
+      x.audio = info.scelta && info.scelta.audio !== undefined && info.scelta.audio !== null ? info.scelta.audio : 0;
+      j_tp(x);
+      disegnaBadgeOsd();
+      carica(t, pausa);
+      if (opz.testo) messaggio(opz.testo, 3500);
+    }, function (e) {
+      attesa(false);
+      messaggio(e.codice === 'rete' ? 'Jellyfin non risponde: riprova' : 'Jellyfin non riesce a preparare il film cosi\'', 4500);
+    });
+  }
+  function j_tp(x) { x.jf.tp = JF.trickplay(x.jf.it, x.jf.ms); }
+  function cambiaQualita(q) {
+    if (!L || !L.jf) return;
+    prefs.qualita = q;
+    salvaPrefs();
+    var x = L, nome = (QUALITA_JF.filter(function (z) { return z.id === q; })[0] || {}).nome || q;
+    x.jf.q = q;
+    if (q !== 'auto') { ricaricaJf({ testo: 'Qualità: ' + nome }); return; }
+    messaggio('Misuro la rete…');
+    chiedi('jf/veloce').then(function (r) {
+      if (L !== x) return;
+      x.jf.mbps = r.mbps;
+      ricaricaJf({ testo: 'Qualità automatica: la rete fa ' + r.mbps + ' Mbps' });
+    }, function () { messaggio('Non riesco a misurare la rete: resto sull\'originale', 4000); x.jf.q = 'orig'; });
+  }
+  // l'anteprima sopra la barra mentre si salta (le tessere di Jellyfin: un foglio alla volta, ridotto con un transform)
+  function anteprimaBarra(t, f) {
+    var an = $('osd-anteprima'), tp = L && L.jf ? L.jf.tp : null;
+    if (t < 0 || !tp) { if (!an.hidden) an.hidden = true; return; }
+    var ts = JF.tessera(tp, t), h = window.innerHeight * 0.135, sc = h / ts.h, w = Math.round(ts.w * sc), te = $('osd-tessera');
+    var url = serv.base + '/api/video/g/' + serv.gettone + '/jf/p/Videos/' + L.jf.id + '/Trickplay/' + tp.larg + '/' + ts.foglio + '.jpg?MediaSourceId=' + L.jf.ms;
+    if (te.getAttribute('data-u') !== url) { te.style.backgroundImage = 'url(' + url + ')'; te.setAttribute('data-u', url); }
+    te.style.width = ts.W + 'px';
+    te.style.height = ts.H + 'px';
+    te.style.transform = 'scale(' + sc + ') translate(' + (-ts.x) + 'px,' + (-ts.y) + 'px)';
+    an.style.width = w + 'px';
+    an.style.marginLeft = (-Math.round(w / 2)) + 'px';
+    an.style.left = 'calc(5vw + ' + Math.max(6, Math.min(84, f * 90)) + 'vw)';
+    an.hidden = false;
+  }
+
   /* ---------------------------------------------------------- Salta sigla: dai capitoli coi nomi giusti */
 
   var SIGLE = [{ re: /^(intro|opening|op|sigla|sigla iniziale|apertura)\b/i, testo: 'Salta sigla' },
     { re: /^(recap|riassunto|previously|nella puntata precedente|nelle puntate precedenti)\b/i, testo: 'Salta riassunto' },
     { re: /^(ending|ed|credits|end credits|titoli di coda|sigla finale|outro)\b/i, testo: 'Salta titoli di coda', fine: true }];
   function siglaDi(t) {
+    // i segmenti di Jellyfin (sigla, riassunto, titoli di coda) valgono prima dei capitoli
+    var g = L && L.jf ? L.jf.segmenti : null;
+    if (g) for (var j = 0; j < g.length; j++) if (t >= g[j].da && t < g[j].a - 1) return { da: g[j].da, fine: g[j].a, testo: g[j].testo, ultima: g[j].ultima };
     var c = L && L.info && L.info.capitoli;
     if (!c || c.length < 2) return null;
     for (var i = 0; i < c.length; i++) {
       var fine = i + 1 < c.length ? c[i + 1].t : ((L.info && L.info.durata) || v.duration || 0);
       if (t >= c[i].t && t < fine - 1) {
-        for (var k = 0; k < SIGLE.length; k++) if (SIGLE[k].re.test(String(c[i].nome || '').replace(/^\s+/, ''))) return { i: i, fine: fine, testo: SIGLE[k].testo, ultima: !!SIGLE[k].fine };
+        for (var k = 0; k < SIGLE.length; k++) if (SIGLE[k].re.test(String(c[i].nome || '').replace(/^\s+/, ''))) return { da: c[i].t, fine: fine, testo: SIGLE[k].testo, ultima: !!SIGLE[k].fine };
         return null;
       }
     }
@@ -1367,7 +2576,7 @@
     L.sigla = s;
     L.sigla.prossimo = n;
     // si vede per 12 secondi dall'inizio del capitolo (o finche' i comandi sono in vista)
-    var inizio = L.info.capitoli[s.i].t, vedi = t - inizio < 12 || $('osd').className === 'on';
+    var inizio = s.da, vedi = t - inizio < 12 || $('osd').className === 'on';
     var testo = n ? 'Prossimo episodio' : s.testo;
     if (b.hidden !== !vedi || b.getAttribute('data-t') !== testo) {
       svuota(b);
@@ -1422,6 +2631,8 @@
   }
   // i sottotitoli accanto al film: "Film.ita.srt", "Film.srt", "Film.en.forced.srt"
   function esterniDi(x) {
+    // Jellyfin: i sottotitoli accanto al film (o dentro un file che non e' MKV) li da' il server
+    if (x.jf) return ((x.info && x.info.esterniJf) || []).map(function (e) { return { nome: e.nome || nomeLingua(e.lingua), p: 'jf:' + e.indice, lingua: e.lingua, forzata: e.forzata }; });
     var base = String(x.voce.nome).replace(/\.[^.]+$/, '').toLowerCase(), out = [];
     var cartella = x.cartella !== null ? x.cartella : x.voce.p.replace(/\/?[^\/]*$/, '');
     for (var i = 0; i < (x.esterni || []).length; i++) {
@@ -1452,7 +2663,9 @@
     x.chiesto = t;
     x.chiestoAlle = Date.now();
     var s = x.sotto, quale = s;
-    var r = s.tipo === 'esterna' ? chiedi('sotto', { d: x.voce.d, e: s.p }) : chiedi('sotto', { d: x.voce.d, p: x.voce.p, t: s.num, da: t, dopo: dopo });
+    var r = x.jf ? (s.tipo === 'esterna' ? chiedi('jf/sottoesterni/' + x.jf.id, { ms: x.jf.ms, i: String(s.p).slice(3) }) :
+      chiedi('jf/sotto/' + x.jf.id, { ms: x.jf.ms, t: s.num, da: t, dopo: dopo })) :
+      s.tipo === 'esterna' ? chiedi('sotto', { d: x.voce.d, e: s.p }) : chiedi('sotto', { d: x.voce.d, p: x.voce.p, t: s.num, da: t, dopo: dopo });
     r.then(function (res) {
       x.inVolo = false;
       if (L !== x || x.sotto !== quale) return;
@@ -1549,6 +2762,11 @@
     if (!L || num === L.audio) return;
     var a = L.info.audio.filter(function (t) { return t.num === num; })[0];
     if (!a) return;
+    if (L.jf && !(L.jf.modo === 'diretto' && a.letto)) {
+      // l'audio lo prepara Jellyfin (convertito, o di nuovo diretto se il TV lo legge): si riparte dallo stesso punto
+      ricaricaJf({ a: L.jf.modo === 'diretto' ? a.ordine : a.num, testo: 'Audio: ' + nomeLingua(a.lingua) + ' · ' + a.nomeCodec + (a.letto ? '' : ' (convertito dal server)') });
+      return;
+    }
     if (!a.letto) { messaggio('Il TV non legge l\'audio ' + a.nomeCodec + ': scegline un altro', 4000); return; }
     var t = v.currentTime, pausa = v.paused;
     ricordaCartella(L.voce, 'a', a.lingua);
@@ -1561,7 +2779,7 @@
   function prossimoAudio() {
     if (!L || !L.info) return;
     if (sconosciuto(L.info)) { messaggio('L\'audio di questo file lo sceglie il lettore del TV'); return; }
-    var buoni = L.info.audio.filter(function (a) { return a.letto; });
+    var buoni = L.info.audio.filter(function (a) { return a.letto || L.jf; });
     if (buoni.length < 2) { messaggio(buoni.length ? 'C\'è solo questo audio' : 'Nessun audio che il TV legge'); return; }
     var k = 0;
     for (var i = 0; i < buoni.length; i++) if (buoni[i].num === L.audio) k = i;
@@ -1596,9 +2814,17 @@
     if (!L || !L.info) return;
     var i = L.info, cols = [], ignoto = sconosciuto(i);
     cols.push({ titolo: 'Audio', voci: ignoto ? [{ testo: 'Audio del file', piccolo: 'lo sceglie il lettore del TV', attiva: true }] : i.audio.length ? i.audio.map(function (a) {
-      return { testo: nomeLingua(a.lingua) + (a.canali ? ' ' + canali(a.canali) : ''), piccolo: a.nomeCodec + (a.letto ? (a.nome ? ' · ' + a.nome : '') : ' · il TV non lo legge'),
-        attiva: a.num === L.audio, spenta: !a.letto, fn: function () { cambiaAudio(a.num); } };
+      var conv = L.jf && (!a.letto || a.server);
+      return { testo: nomeLingua(a.lingua) + (a.canali ? ' ' + canali(a.canali) : ''), piccolo: a.nomeCodec + (conv ? ' · lo converte il server' : a.letto ? (a.nome ? ' · ' + a.nome : '') : ' · il TV non lo legge'),
+        attiva: a.num === L.audio, spenta: !a.letto && !L.jf, fn: function () { cambiaAudio(a.num); } };
     }).concat([{ testo: 'Ritardo audio', piccolo: 'non si può col lettore del TV: si potrà dal Mac', spenta: true }]) : [{ testo: 'Nessun audio', spenta: true }] });
+    if (L.jf && !L.jf.trailer) {
+      var j = L.jf, g = j.g || {};
+      cols.push({ titolo: 'Qualità', voci: QUALITA_JF.map(function (q) {
+        return { testo: q.nome, piccolo: q.id === 'orig' ? (g.mbps ? String(g.mbps).replace('.', ',') + ' Mbps · ' : '') + (j.modo === 'diretto' || j.modo === 'file' ? 'il file vero' : j.modo === 'copia' ? 'video originale' : 'convertito') :
+          q.id === 'auto' && j.mbps ? 'la rete fa ' + j.mbps + ' Mbps' : q.piccolo, attiva: j.q === q.id, fn: function () { cambiaQualita(q.id); } };
+      }) });
+    }
     var sv = [{ testo: 'Nessuno', attiva: !L.sotto, fn: function () { impostaSotto(null, true); } }];
     i.sotto.forEach(function (s) {
       sv.push({ testo: nomeLingua(s.lingua) + (s.forzata ? ' · forzati' : ''), piccolo: s.nomeCodec + (s.nome ? ' · ' + s.nome : '') + (s.leggibile ? '' : ' · l\'app non li disegna ancora'),
@@ -1627,8 +2853,8 @@
       return { testo: s.nome, attiva: (prefs.schermo || 'adatta') === s.id, fn: function () { prefs.schermo = s.id; salvaPrefs(); applicaSchermo(); } };
     }) });
     if (i.capitoli && i.capitoli.length > 1) {
-      cols.push({ titolo: 'Capitoli', voci: i.capitoli.map(function (c, k) {
-        return { testo: c.nome || 'Capitolo ' + (k + 1), piccolo: tempo(c.t), attiva: false, fn: function () { vai(c.t); chiudiPannello(); } };
+      cols.push({ titolo: 'Capitoli', larga: !!i.capitoli[0].img || (i.capitoli[1] && !!i.capitoli[1].img), voci: i.capitoli.map(function (c, k) {
+        return { testo: c.nome || 'Capitolo ' + (k + 1), piccolo: tempo(c.t), attiva: false, img: c.img || null, fn: function () { vai(c.t); chiudiPannello(); } };
       }) });
     }
     cols.push({ titolo: 'Info', info: true, voci: [] });
@@ -1642,6 +2868,8 @@
     $('salta').hidden = true;
     disegnaPannello();
     mostraOsd(true);
+    // solo la memoria del servizio (un errore qui non scollega Jellyfin)
+    if (!vecchio) chiedi('jf/stato').then(function (r) { if (jf.stato && r.servizio) { jf.stato.servizio = r.servizio; if (pan) disegnaPannello(); } }, function () {});
   }
   function disegnaPannello() {
     var fuori = $('pannello');
@@ -1652,15 +2880,17 @@
     fuori.appendChild(box);
     var liste = [];
     for (var c = 0; c < pan.colonne.length; c++) {
-      var col = pan.colonne[c], d = el('div', 'col' + (c === pan.c ? ' sel' : '') + (col.info ? ' larga' : col.stretta ? ' stretta' : ''));
+      var col = pan.colonne[c], d = el('div', 'col' + (c === pan.c ? ' sel' : '') + (col.info || col.larga ? ' larga' : col.stretta ? ' stretta' : ''));
       d.appendChild(el('h3', '', col.titolo));
       var lista = el('div', 'elenco');
       if (col.info) {
         lista.appendChild(infoRighe());
       } else {
         for (var r = 0; r < col.voci.length; r++) {
-          var x = col.voci[r], e = el('div', 'v' + (x.attiva ? ' attiva' : '') + (x.spenta ? ' spenta' : '') + (r === pan.r[c] ? ' sel' : ''));
+          var x = col.voci[r], e = el('div', 'v' + (x.attiva ? ' attiva' : '') + (x.spenta ? ' spenta' : '') + (r === pan.r[c] ? ' sel' : '') + (x.img ? ' con-img' : ''));
           e.appendChild(icona(ICONE.spunta));
+          // l'immagine del capitolo (Jellyfin): solo nella colonna scelta, vicino alla voce scelta
+          if (x.img) { var mi = el('div', 'mini'); e.appendChild(mi); if (c === pan.c && Math.abs(r - pan.r[c]) < 6) mettiImg(mi, '', x.img, 248, 140); }
           e.appendChild(document.createTextNode(x.testo));
           if (x.piccolo) e.appendChild(el('small', '', x.piccolo));
           lista.appendChild(e);
@@ -1693,9 +2923,18 @@
     var a = i.audio.filter(function (t) { return t.num === L.audio; })[0];
     r('Audio', sconosciuto(i) ? 'quello del file (lo sceglie il lettore del TV)' : a ? nomeLingua(a.lingua) + ' · ' + a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') : 'nessuno che il TV legga');
     r('Contenitore', String(i.formato || '').toUpperCase());
+    if (L.jf) {
+      var st = jf.stato && jf.stato.server ? jf.stato.server.nome : 'Jellyfin', g = L.jf.g || {};
+      r('Da', st + ' · ' + (L.jf.modo === 'diretto' ? 'il file vero (come da una chiavetta)' : L.jf.modo === 'file' ? 'il file vero, cosi\' com\'e\'' :
+        L.jf.modo === 'copia' ? 'video originale, audio o contenitore dal server' : 'convertito dal server'));
+      if (g.motivi && g.motivi.length && L.jf.modo !== 'diretto') r('Perché', g.motivi.map(motivoBello).join(', '));
+    }
     if (L.ritardo) r('Sottotitoli', 'ritardo ' + testoRitardo(L.ritardo));
     var avv = avvisoDi(i);
     if (avv) r('Nota', avv);
+    // il servizio del TV: la sua memoria (si aggiorna a ogni apertura del pannello)
+    var sv = jf.stato && jf.stato.servizio;
+    if (sv) r('Servizio del TV', sv.memoria + ' MB di memoria · Node ' + String(sv.node || '').replace(/^v/, ''));
     return box;
   }
   function chiudiPannello() { pan = null; $('pannello').hidden = true; nascondiOsdPresto(); }
@@ -1731,6 +2970,7 @@
   /* ---------------------------------------------------------- pulsanti (Su): Ricomincia, Prossimo episodio */
 
   function prossimoDi(x) {
+    if (x && x.jf) { var n0 = x.jf.prossimo; return n0 ? { jf: n0, nome: n0.Name, d: '', p: 'jf:' + n0.Id, dim: 0 } : null; }
     if (!x || !x.vicini) return null;
     var t = titoloDi(x.voce.nome);
     if (!t.episodio) return null;
@@ -1794,6 +3034,7 @@
     if (!x || !x.info || !x.partito) return;
     var d = x.info.durata || v.duration || 0, t = fine ? d : v.currentTime;
     if (!d || !isFinite(t)) return;
+    if (x.jf) { puntoJf(x, t, d, fine, chiuso); return; }
     var finitoOra = fine || t >= d - Math.max(90, d * 0.05);
     punti[chiaveDi(x.voce.p, x.voce.dim)] = { d: x.voce.d, p: x.voce.p, dim: x.voce.dim, nome: x.voce.nome, t: Math.round(t), dur: Math.round(d), quando: Date.now(), finito: finitoOra };
     salvaPunti();
@@ -1814,6 +3055,7 @@
     svuota($('osd-chip'));
     $('avviso-lettore').hidden = true;
     $('osd-meta').hidden = true;
+    $('osd-anteprima').hidden = true;
     $('salta').hidden = true;
     if (pgs) pgs.azzera();
     $('pgs').hidden = true;
@@ -1835,6 +3077,8 @@
     $('osd').className = '';
     attesa(false);
     var r = x ? x.ritorno : 'inizio';
+    if (x && x.jf) { fermaConversione(x.jf); jf.caricato = 0; }
+    if (typeof r === 'function') { r(); return; }
     if (r === 'esci') { HomeTV.esci(); apriInizio(); return; }
     if (r === 'scheda' && sch) { tornaAllaScheda(); return; }
     if (r === 'libreria' && x) { apriLibreria(x.voce.d, x.cartella || '', x.voce.p.split('/').pop()); return; }
@@ -1873,7 +3117,7 @@
     if (schermo === 'lettore') return L ? tastoLettore(a) : true;
     if (schermo === 'libreria') return tastoLibreria(a);
     if (schermo === 'scheda' && a === 'play') { if (sch && sch.guarda) sch.guarda(); return true; }
-    if (schermo === 'inizio' || schermo === 'scheda') return tastoPagina(a);
+    if (schermo === 'inizio' || schermo === 'scheda' || schermo === 'cerca' || schermo === 'collega') return tastoPagina(a);
     return false;
   });
   // la barra del video sul telefono
@@ -1892,8 +3136,10 @@
       chiudiLettore();
       return true;
     }
-    if (schermo === 'scheda') { indietroScheda(); return true; }
-    if (schermo === 'libreria') { lib.giro++; indietroLibreria(); return true; }
+    if (schermo === 'scheda') { if (sch && sch.jf) { schGiro++; sch.indietro(); } else indietroScheda(); return true; }
+    if (schermo === 'libreria') { lib.giro++; if (lib.jf) lib.indietro(); else indietroLibreria(); return true; }
+    if (schermo === 'cerca') { cerca.giro++; (cerca.indietro || tornaInizio)(); return true; }
+    if (schermo === 'collega') { coll.giro++; clearTimeout(coll.timer); (coll.indietro || tornaInizio)(); return true; }
     return false; // dall'inizio: si esce dall'app
   });
   // la pagina non scorre mai da sola (tutto si muove con transform)
@@ -1916,9 +3162,19 @@
     orologio();
     // aperta da Continua a guardare della home: #/v/<percorso>?d=&dim= (chiavetta e dimensione), piu' t=<secondi> (il
     // punto della scheda) o dacapo=1; con Indietro si torna alla home
-    var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash);
+    var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash), mj = /#\/jf\/([0-9a-f]{32})(?:\?(.*))?$/.exec(location.hash);
     prendiPermesso().then(function () {
       apriInizio();
+      // Jellyfin: lo stato (server, utente, i codec del TV) e le file dell'inizio; dalla home un film di Jellyfin riparte subito
+      jfCaricaStato(function () {
+        jfCaricaInizio(true);
+        disegnaInizio('tieni');
+        if (!mj) return;
+        var q = {}, coppie = String(mj[2] || '').split('&');
+        for (var i = 0; i < coppie.length; i++) { var kv = coppie[i].split('='); if (kv[0]) q[kv[0]] = decodeURIComponent(kv[1] || ''); }
+        if (!jfAttivo()) { messaggio('Collega Jellyfin per riprendere questo film (Altro › Collega Jellyfin)', 6000); return; }
+        guardaJf({ Id: mj[1], Name: '' }, { ritorno: 'esci', daCapo: q.dacapo === '1', t: q.t !== undefined && isFinite(+q.t) ? +q.t : undefined });
+      });
       if (m) {
         var q = {}, coppie = m[2].split('&');
         for (var i = 0; i < coppie.length; i++) { var kv = coppie[i].split('='); q[kv[0]] = decodeURIComponent(kv[1] || ''); }
@@ -1927,6 +3183,6 @@
         // prima le chiavette: se la lettera e' cambiata, il film si cerca anche sulle altre
         chiedi('dischi').then(function (r) { dischi = r.dischi || []; riprendi(x, 'esci'); }, function () { riprendi(x, 'esci'); });
       }
-    }, function (e) { dischiErrore = e; apriInizio(); });
+    }, function (e) { dischiErrore = e; jf.stato = { server: null, utente: null, errore: e.codice }; apriInizio(); });
   });
 })();

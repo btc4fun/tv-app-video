@@ -10,7 +10,8 @@
 </head>
 <body>
   <!-- lo sfondo: due strati che si danno il cambio (la copertina sfocata della voce scelta, o il fanart nitido della scheda) -->
-  <div id="sfondo"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><div id="sfondo-velo"></div></div>
+  <!-- dietro la scheda, dopo qualche secondo: il trailer (o il film) senza audio; si spegne nelle impostazioni -->
+  <div id="sfondo"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><video id="trailer" muted playsinline preload="none" hidden></video><div id="sfondo-velo"></div></div>
 
   <!-- inizio: il film da riprendere in grande, Continua a guardare, chiavette e dischi -->
   <div id="schermo-inizio" class="schermo">
@@ -23,6 +24,8 @@
         <div id="eroe-pulsanti" class="pulsanti"></div>
       </section>
       <section class="sezione" id="sez-continua" hidden><h2>Continua a guardare</h2><div class="fila" id="fila-continua"></div></section>
+      <!-- Jellyfin: prossimi episodi, aggiunti di recente, librerie, generi, collezioni, preferiti (fatte dall'app) -->
+      <div id="jf-righe"></div>
       <section class="sezione" id="sez-dischi" hidden><h2>Chiavette e dischi</h2><div class="fila" id="fila-dischi"></div></section>
       <section id="vuoto" hidden>
         <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 4h12v8h4v26a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V12h4zm4 4v4h4V8zm-6 8v22a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V16z"/></svg>
@@ -30,12 +33,14 @@
         <p id="vuoto-testo">Appena il TV lo vede, i tuoi video compaiono qui.</p>
         <div class="pulsante" id="vuoto-riprova" data-tv>Controlla di nuovo</div>
       </section>
+      <section class="sezione" id="sez-altro"><h2>Altro</h2><div class="fila" id="fila-altro"></div></section>
     </div>
   </div>
 
   <!-- una cartella: le copertine in griglia, in alto la voce scelta -->
   <div id="schermo-libreria" class="schermo" hidden>
     <div id="lib-testa"><div id="briciole"></div><div id="lib-conta"></div></div>
+    <div id="lib-barra" hidden></div>
     <div id="lib-scelto">
       <h1 id="ls-titolo"></h1>
       <div id="ls-meta" class="meta"></div>
@@ -62,6 +67,32 @@
       <section class="sezione" id="sez-stagioni" hidden><h2>Stagioni</h2><div class="fila" id="fila-stagioni"></div></section>
       <section class="sezione" id="sez-puntate" hidden><h2 id="puntate-titolo">Puntate</h2><div class="fila" id="fila-puntate"></div></section>
       <section class="sezione" id="sez-cast" hidden><h2>Cast</h2><div class="fila" id="fila-cast"></div></section>
+      <section class="sezione" id="sez-simili" hidden><h2>Più come questo</h2><div class="fila" id="fila-simili"></div></section>
+    </div>
+  </div>
+
+  <!-- cerca nei film di Jellyfin: tastiera del TV o del telefono -->
+  <div id="schermo-cerca" class="schermo" hidden>
+    <div class="testata"><div class="marchio">Cerca</div><div class="ora" id="ora-cerca"></div></div>
+    <div id="cerca-corpo" class="corpo">
+      <section id="cerca-sopra">
+        <div class="pulsanti" id="cerca-pulsanti"></div>
+        <p id="cerca-stato"></p>
+      </section>
+      <div id="cerca-righe"></div>
+    </div>
+  </div>
+
+  <!-- collegare Jellyfin: il server nella rete di casa, poi il codice da confermare dal telefono -->
+  <div id="schermo-collega" class="schermo" hidden>
+    <div id="collega-corpo" class="corpo">
+      <section id="collega-sopra">
+        <div id="collega-titolo"></div>
+        <p id="collega-testo"></p>
+        <div id="qc-codice" hidden></div>
+        <div class="pulsanti" id="collega-pulsanti"></div>
+      </section>
+      <section class="sezione" id="sez-server" hidden><h2>Nella rete di casa</h2><div class="fila" id="fila-server"></div></section>
     </div>
   </div>
 
@@ -77,6 +108,7 @@
       <div id="osd-aiuto">OK pausa &middot; &#9664; &#9654; 10 s &middot; Gi&ugrave; audio e sottotitoli</div>
       <div id="osd-chip"></div>
       <div id="avviso-lettore" hidden></div>
+      <div id="osd-anteprima" hidden><div id="osd-tessera"></div></div>
       <div id="osd-barra"><div id="osd-car"></div><div id="osd-fatto"></div></div>
       <div id="osd-testa"></div>
       <div id="osd-meta" hidden></div>
@@ -93,6 +125,7 @@
   <div id="messaggio"></div>
 
   <script src="pgs.js"></script>
+  <script src="jf.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
