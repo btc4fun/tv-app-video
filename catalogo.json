@@ -8,13 +8,17 @@
       "descrizione": "I tuoi film e le serie in 4K HDR, dal Jellyfin del Mac o dalle chiavette e dai dischi USB attaccati al TV. Sceglie da sola l'audio che il TV legge, disegna i sottotitoli (anche quelli dei Blu-ray) e riprende da dove eri.",
       "icona": "icona.png",
       "copertina": "copertina.png",
-      "versione": "1.1.0",
-      "novita": "Grafica nuova: i film arrivati da poco in alto, una fila per ogni collezione (anche quelle fatte sul Mac, come MCU), schede più belle e il menu a sinistra.",
+      "versione": "1.1.1",
+      "novita": "Tutte le qualità funzionano, anche 4K 40, 25 e 15 sui film lunghi. Se una qualità non va, il film riparte in Originale. Da Jellyfin l'originale arriva pronto dal Mac.",
       "categoria": "film",
       "url": "./",
       "autore": "Home TV",
-      "permessi": ["video"],
-      "richiede": { "video": 1 },
+      "permessi": [
+        "video"
+      ],
+      "richiede": {
+        "video": 1
+      },
       "evidenza": true
     }
   ]

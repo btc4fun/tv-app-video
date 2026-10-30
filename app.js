@@ -2844,7 +2844,7 @@
     riga('Regia', (s.registi || []).join(', '));
     riga('Scritto da', (s.scrittori || []).join(', '));
     riga('Studio', (s.studi || []).join(', '));
-    if (info && info.video) riga('Video', info.video.nomeCodec + ' · ' + info.video.largh + '×' + info.video.alt + (info.video.hdr ? ' · ' + (info.video.hdr === 'DV' ? 'Dolby Vision (il TV usa HDR10)' : info.video.hdr) : ''));
+    if (info && info.video) riga('Video', info.video.nomeCodec + ' · ' + info.video.largh + '×' + info.video.alt + (info.video.hdr ? ' · ' + (info.video.hdr === 'DV' ? 'Dolby Vision ' + (info.video.dv ? info.video.dv.profilo + ' ' : '') + '(' + notaDv(info.video.dv) + ')' : info.video.hdr) : ''));
     if (info && info.audio.length) riga('Audio', info.audio.slice(0, 4).map(function (a) {
       return nomeLingua(a.lingua) + ' ' + a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') + (a.tv ? ' (lo converte il TV)' : a.letto ? '' : ' (il TV non lo legge)');
     }).join(', ') + (info.audio.length > 4 ? '…' : ''));
@@ -2852,7 +2852,17 @@
     $('sez-info').hidden = !righe.children.length;
     var avv = info ? avvisoDi(info) : '';
     // il TV non sente questo film: lo stesso su Jellyfin si sente (il Mac converte l'audio)
-    if (info && info.avvisi.indexOf('audio') !== -1) {
+    // Dolby Vision 5: lo stesso film su Jellyfin si vede coi colori giusti (il Mac lo converte)
+    if (info && info.avvisi.indexOf('colori') !== -1) {
+      if (!jfAttivo()) avv = avv.replace(/ Si vede giusto.*$/, ' Si vede giusto da Jellyfin sul Mac, che lo converte (Altro › Collega Jellyfin).');
+      else if (x.gemello === undefined) {
+        x.gemello = null;
+        cercaGemelloJf(s, info, x.p, function (it) { if (sch === x) { x.gemello = it || false; disegnaScheda(x); } });
+      } else if (x.gemello) {
+        avv = avv.replace(/ Si vede giusto.*$/, ' Su Jellyfin c\'è lo stesso film: "Guarda da Jellyfin" lo mostra coi colori giusti.');
+        pp.insertBefore(pulsante('Guarda da Jellyfin', 'jellyfin', function () { guardaJf(x.gemello, { ritorno: 'scheda' }); }, 'colori giusti'), pp.firstChild);
+      } else if (x.gemello === false) avv = avv.replace(/ Si vede giusto.*$/, ' Su Jellyfin non trovo lo stesso film: aggiungilo alla libreria di Jellyfin e il Mac lo convertirà.');
+    } else if (info && info.avvisi.indexOf('audio') !== -1) {
       if (!jfAttivo()) avv = avv.replace(/ Si potrà sentire.*$/, ' Con Jellyfin sul Mac si sente: il Mac converte l\'audio (Altro › Collega Jellyfin).');
       else if (x.gemello === undefined) {
         x.gemello = null;
@@ -3044,7 +3054,7 @@
       var largh = conv && conv.larg ? Math.min(v.largh, conv.larg) : v.largh;
       out.push({ t: largh >= 3200 ? '4K' : largh >= 1900 ? 'HD 1080' : largh >= 1200 ? 'HD 720' : 'SD', forte: largh >= 3200 });
       if (conv && v.hdr) out.push({ t: 'SDR · colori adattati', conv: true });
-      else if (v.hdr === 'DV') out.push({ t: 'DOLBY VISION', forte: false, nota: 'il TV usa HDR10' });
+      else if (v.hdr === 'DV') out.push({ t: 'DOLBY VISION', forte: false, nota: notaDv(v.dv) });
       else if (v.hdr) out.push({ t: v.hdr, forte: true });
       out.push({ t: v.nomeCodec });
     }
@@ -3080,13 +3090,22 @@
     })());
   }
   function sconosciuto(info) { return info.avvisi.indexOf('sconosciuto') !== -1 || info.avvisi.indexOf('struttura') !== -1; }
+  // il Dolby Vision di un file della chiavetta: il TV (senza Dolby Vision) usa la base, se c'e' (profili 8.1 e 7: HDR10)
+  function notaDv(dv) {
+    var c = dv ? dv.compatibile : -1;
+    return c === 1 || c === 6 ? 'il TV usa HDR10' : c === 4 ? 'il TV usa HLG' : c === 2 ? 'il TV usa SDR' : c === 0 ? 'colori sbagliati sul TV' : 'il TV usa la base';
+  }
   // la traccia audio scelta, se e' un DTS o TrueHD che converte il TV (il servizio: tv-sito/audio-tv.js)
   function audioDelTv(info, num) {
     for (var i = 0; info && i < info.audio.length; i++) if (info.audio[i].num === num && info.audio[i].tv) return info.audio[i];
     return null;
   }
-  function avvisoDi(info) {
+  function avvisoDi(info, senzaColori) {
     if (info.avvisi.indexOf('video') !== -1) return 'Il TV non legge il video di questo file (' + (info.video ? info.video.nomeCodec : 'formato sconosciuto') + ').';
+    if (!senzaColori && info.avvisi.indexOf('colori') !== -1) {
+      return 'Questo film è in Dolby Vision ' + (info.video && info.video.dv ? info.video.dv.profilo : 5) + ', senza la base HDR10: il TV non ha il Dolby Vision e ' +
+        'lo mostrerebbe con i colori sbagliati (viola e verdi). Si vede giusto da Jellyfin sul Mac, che lo converte.';
+    }
     if (info.avvisi.indexOf('audio') !== -1) {
       var nomi = info.audio.map(function (x) { return x.nomeCodec; }).filter(function (x, i, l) { return l.indexOf(x) === i; }).join(' e ');
       // il TV potrebbe convertirlo (audio-tv.js nel servizio): perche' non lo fa
@@ -3148,10 +3167,25 @@
         fermo('Il TV non legge questo video', avvisoDi(i), [{ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
         return;
       }
+      // Dolby Vision 5 dalla chiavetta: i colori verrebbero sbagliati. Si chiede prima (dalla scheda c'e' "Guarda da Jellyfin")
+      if (i.avvisi.indexOf('colori') !== -1 && !o.coloriOk) {
+        attesa(false);
+        fermo('Colori sbagliati su questo TV', avvisoDi(i), [
+          { testo: 'Guardalo lo stesso', fn: function () {
+            chiudiFermo();
+            var o2 = {};
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) o2[k] = o[k];
+            o2.coloriOk = true;
+            o2.info = i;
+            apriVideo(voce, o2);
+          } },
+          { testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
+        return;
+      }
       x.audio = o.audio || (i.scelta && i.scelta.audio) || 0;
       scegliSottotitoliIniziali(x, o.sottoScelto);
       disegnaBadgeOsd();
-      if (i.avvisi.indexOf('audio') !== -1) avvisoLettore(avvisoDi(i), 9000);
+      if (i.avvisi.indexOf('audio') !== -1) avvisoLettore(avvisoDi(i, true), 9000);
       else if (!voce.jf && audioDelTv(i, x.audio)) avvisoLettore('Audio ' + audioDelTv(i, x.audio).nomeCodec + ': lo converte il TV in Dolby Digital', 5000);
       var vo = voce.tvDi || voce, pt = voce.jf ? null : punti[chiaveDi(vo.p, vo.dim)];
       var da = riprendibile(pt, i.durata) ? pt.t : 0;
@@ -3295,8 +3329,29 @@
       setTimeout(function () { if (L === x) carica(t); }, 1500);
       return;
     }
-    fermo('Il TV non riesce a leggere questo video', codice === 4 ? 'Il formato non va bene per il lettore del TV.' : 'La lettura si è fermata.',
-      [{ testo: 'Riprova', fn: function () { chiudiFermo(); if (L === x) { x.errori = 0; carica(t); } } }, { testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
+    // una qualita' convertita dal server che il TV non riesce a leggere (30/10/2026: la scelta resta per tutti i film, e il
+    // lettore non partiva piu' con nessuno): si torna da soli all'originale, che resta scelto. Una volta sola per film
+    if (x.jf && x.jf.q && x.jf.q !== 'orig' && !x.giaOriginale) {
+      x.giaOriginale = true;
+      prefs.qualita = 'orig';
+      salvaPrefs();
+      x.jf.q = 'orig';
+      ricaricaJf({ testo: 'Questa qualità non va sul TV: riparto in Originale' });
+      return;
+    }
+    var azioni = [{ testo: 'Riprova', fn: function () { chiudiFermo(); if (L === x) { x.errori = 0; carica(t); } } }];
+    if (x.jf && x.jf.q !== 'orig') {
+      azioni.push({ testo: 'Guarda in Originale', fn: function () {
+        chiudiFermo();
+        if (L !== x) return;
+        prefs.qualita = 'orig';
+        salvaPrefs();
+        x.jf.q = 'orig';
+        ricaricaJf({ testo: 'Qualità: Originale' });
+      } });
+    }
+    azioni.push({ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } });
+    fermo('Il TV non riesce a leggere questo video', codice === 4 ? 'Il formato non va bene per il lettore del TV.' : 'La lettura si è fermata.', azioni);
   });
   v.addEventListener('timeupdate', function () {
     if (!L) return;
@@ -4199,7 +4254,7 @@
     function r(a, b) { var x = el('div'); x.appendChild(document.createTextNode(a + ' ')); x.appendChild(el('b', '', b)); box.appendChild(x); }
     r('File', L.voce.nome);
     r('Peso', peso(i.dim) + (i.mbps ? ' · ' + String(i.mbps).replace('.', ',') + ' Mbps di media' : ''));
-    if (vv) r('Video', vv.nomeCodec + ' · ' + vv.largh + '×' + vv.alt + (vv.hdr ? ' · ' + (vv.hdr === 'DV' ? 'Dolby Vision (il TV usa HDR10)' : vv.hdr) : ''));
+    if (vv) r('Video', vv.nomeCodec + ' · ' + vv.largh + '×' + vv.alt + (vv.hdr ? ' · ' + (vv.hdr === 'DV' ? 'Dolby Vision (' + notaDv(vv.dv) + ')' : vv.hdr) : ''));
     var a = i.audio.filter(function (t) { return t.num === L.audio; })[0];
     r('Audio', sconosciuto(i) ? 'quello del file (lo sceglie il lettore del TV)' : a ? nomeLingua(a.lingua) + ' · ' + a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') : 'nessuno che il TV legga');
     r('Contenitore', String(i.formato || '').toUpperCase());
