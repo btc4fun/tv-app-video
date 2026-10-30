@@ -1490,6 +1490,7 @@
     }, function (e) {
       messaggio(e.codice === 'indirizzo' ? 'Indirizzo non valido' : e.codice === 'jellyfin' ? 'A quell\'indirizzo non risponde Jellyfin' :
         e.codice === 'troppe' ? 'Troppi indirizzi provati: riprova tra qualche minuto' :
+        e.codice === 'certificato' ? 'Il TV non accetta il certificato https di quel server: prova con http://' + indirizzo.replace(/^https?:\/\//i, '') :
         e.codice === 'rete' ? 'Il server non risponde: e\' acceso?' : 'Non riesco a collegarmi', 5000);
       $('collega-testo').textContent = 'Riprova, o scrivi un altro indirizzo.';
     });
