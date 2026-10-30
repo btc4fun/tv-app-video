@@ -318,6 +318,14 @@
   // niente tela: un <img> che compare quando e' pronto. Al massimo quattro in volo, prima le ultime chieste (le frecce tenute
   // premute non riempiono la coda di copertine gia' passate)
   var dritte = { coda: [], inVolo: 0 };
+  // il riquadro sta in una carta che ha lasciato andare le sue immagini (lontana dalla scelta, o la pagina sotto il lettore)
+  function lontano(box) {
+    for (var e = box; e && e !== document.body; e = e.parentNode) {
+      if (e.caricata === false) return true;
+      if (e.hidden && e.classList && e.classList.contains('schermo')) return true; // uno schermo nascosto (sotto il lettore)
+    }
+    return false;
+  }
   function mettiDritta(box, ref, w, h, poi) {
     dritte.coda.push({ box: box, url: urlImmagine('', ref, w, h, false), poi: poi || null });
     setTimeout(prossimaDritta, 0); // al giro dopo: chi l'ha chiesta intanto mette la casella nella pagina
@@ -325,22 +333,28 @@
   function prossimaDritta() {
     while (dritte.inVolo < 4 && dritte.coda.length) {
       var x = dritte.coda.pop();
-      if (!x.box.parentNode || !document.body.contains(x.box)) { if (x.poi) x.poi(false); continue; }
+      if (!x.box.parentNode || !document.body.contains(x.box) || lontano(x.box)) { if (x.poi) x.poi(false); continue; }
       dritte.inVolo++;
       (function (x) {
         var im = el('img'), fatto = false, t = null;
         function fine(si) {
           if (fatto) return;
           fatto = true;
+          im.fine = null; // non e' piu' in viaggio: lasciarla poi vuol dire solo staccarla
           clearTimeout(t);
           dritte.inVolo--;
-          if (si) im.className = 'on'; else if (im.parentNode) im.parentNode.removeChild(im);
+          // (tolta intanto: la carta e' andata lontano)
+          if (si && (!im.parentNode || lontano(x.box))) si = false;
+          if (si) im.className = 'on'; else { im.removeAttribute('src'); if (im.parentNode) im.parentNode.removeChild(im); }
           if (x.poi) { try { x.poi(si); } catch (e) {} }
           prossimaDritta();
         }
         im.onload = function () { fine(true); };
         im.onerror = function () { fine(false); };
         t = setTimeout(function () { fine(false); }, 15000);
+        // (tolto src a un'immagine che si sta caricando, Chromium non manda ne' load ne' error: chi la lascia chiama fine, se no il
+        // posto in coda resterebbe preso fino ai 15 secondi, e con quattro posti si fermerebbero tutte le copertine)
+        im.fine = fine;
         im.alt = '';
         im.src = x.url;
         x.box.insertBefore(im, x.box.firstChild ? x.box.firstChild.nextSibling : null); // sopra la copertina disegnata, sotto barre e segni
@@ -351,13 +365,27 @@
   function mettiImg(box, d, ref, w, h, tutta, poi) {
     if (ref && ref.jf && !tutta && serv.gettone) { mettiDritta(box, ref, w, h, poi); return; }
     piccola(d, ref, w, h, function (url) {
-      if (!url || !box.parentNode) { if (poi) poi(false); return; }
+      if (!url || !box.parentNode || lontano(box)) { if (poi) poi(false); return; }
       var im = el('img');
       im.onload = function () { im.className = 'on'; };
       im.src = url;
       box.insertBefore(im, box.firstChild ? box.firstChild.nextSibling : null); // sopra la copertina disegnata, sotto barre e segni
       if (poi) poi(true);
-    }, tutta, function () { return !!box.parentNode && document.body.contains(box); });
+    }, tutta, function () { return !!box.parentNode && document.body.contains(box) && !lontano(box); });
+  }
+  // una carta lascia andare le sue immagini: quelle messe e quelle in coda. Tornando vicina si ricaricano (carica)
+  function lasciaImg(im) {
+    if (im.fine) { im.fine(false); return; } // in viaggio: la sua fine la toglie e libera il posto
+    im.removeAttribute('src');
+    if (im.parentNode) im.parentNode.removeChild(im);
+  }
+  function lasciaCarta(c) {
+    c.caricata = false;
+    if (c.caricaImg) c.carica = c.caricaImg;
+    var l = c.querySelectorAll('img');
+    for (var i = l.length - 1; i >= 0; i--) lasciaImg(l[i]);
+    var f = c.querySelectorAll('.finta');
+    for (var j = 0; j < f.length; j++) f[j].style.opacity = '';
   }
   // la copertina disegnata: titolo pulito, anno, un colore spento dal nome (mai un riquadro grigio)
   function finta(titolo, anno, tipo) {
@@ -409,9 +437,10 @@
 
   /* ============================================================ memoria (64 KB per app, tenuta dalla home) */
 
-  // le anteprime dietro la scheda (un secondo video da decodificare): accese di base solo sui TV dal 2021 (Chromium 76 in su)
-  var chromium = /Chrome\/(\d+)/.exec(navigator.userAgent);
-  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: !chromium || +chromium[1] >= 76,
+  // il trailer dietro la scheda (un secondo video da decodificare, che passa dal servizio): spento su tutti i TV finche' non e'
+  // provato sul TV vero. Su un Samsung del 2022 il servizio cadeva quando partiva un video (30/10): niente video che partono da soli
+  var TRAILER_DIETRO = false;
+  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: false,
     anteprimeScelte: false };
   var punti = {}; // chiave -> { d, p, dim, nome, t, dur, quando, finito }
   var cartelle = {}; // "disco|cartella" -> { a: lingua dell'audio, s: lingua dei sottotitoli o 'no', quando }: le puntate
@@ -469,8 +498,12 @@
 
   var schermo = '';
   var memInizio = null;
+  var CON_IMMAGINI = { inizio: 'schermo-inizio', scheda: 'schermo-scheda', libreria: 'schermo-libreria', cerca: 'schermo-cerca' };
   function mostra(nome) {
     if (schermo === 'inizio' && nome !== 'inizio' && pag && pag.corpo === $('inizio-corpo')) memInizio = pag;
+    // lo schermo che si lascia lascia andare le sue immagini (tornando si ridisegna sempre): sul TV restano decodificate solo
+    // quelle della pagina che si vede
+    if (nome !== schermo && CON_IMMAGINI[schermo]) lasciaImmagini([CON_IMMAGINI[schermo]], false);
     schermo = nome;
     $('schermo-inizio').hidden = nome !== 'inizio';
     $('schermo-libreria').hidden = nome !== 'libreria';
@@ -479,6 +512,7 @@
     $('schermo-cerca').hidden = nome !== 'cerca';
     $('schermo-collega').hidden = nome !== 'collega';
     $('sfondo').hidden = nome === 'lettore';
+    if (nome === 'lettore') lasciaImmagini(['schermo-inizio', 'schermo-scheda', 'schermo-libreria', 'schermo-cerca'], true);
     // il trailer dietro la scheda: solo li' (e mai insieme al lettore: un decoder alla volta)
     if (nome !== 'scheda') fermaTrailer();
     // il banner che cambia film, la ricerca del Mac e il binario: solo all'inizio
@@ -486,6 +520,31 @@
     if (nome === 'scheda') modoSfondo('scheda');
     else if (nome === 'libreria') modoSfondo('righe');
     else if (nome === 'cerca' || nome === 'collega') modoSfondo('piatto');
+  }
+  // via le immagini degli schermi che non si vedono (con sfondo: anche lo sfondo, entrando nel lettore). Sul TV il 4K del film
+  // vuole tanta memoria, e se manca il TV chiude il servizio (che porta il film). Tornando, la pagina si ridisegna e le ricarica
+  function lasciaImmagini(ids, sfondoAnche) {
+    ids.forEach(function (id) {
+      var radice = $(id);
+      // prima via dalla coda (se no le immagini in viaggio, chiudendosi, farebbero partire quelle di questo schermo), poi quelle
+      // in viaggio e quelle messe
+      dritte.coda = dritte.coda.filter(function (x) {
+        if (!radice.contains(x.box)) return true;
+        if (x.poi) { try { x.poi(false); } catch (e) {} }
+        return false;
+      });
+      var l = radice.querySelectorAll('img');
+      for (var i = l.length - 1; i >= 0; i--) lasciaImg(l[i]);
+      if (id === 'schermo-inizio') { eroeChiave = ''; eroeGiro++; }
+      // la scheda rifa' il logo tornando (se no restava vuota: il titolo scritto era gia' stato tolto quando il logo era arrivato)
+      if (id === 'schermo-scheda' && sch) sch.logoFatto = false;
+    });
+    if (!sfondoAnche) return;
+    imm.coda = [];
+    clearTimeout(sfondoTimer);
+    clearTimeout(svuotaTimer);
+    ['sfondo-a', 'sfondo-b'].forEach(function (id) { $(id).style.backgroundImage = 'none'; $(id).className = 'strato'; });
+    sfondoChiave = null;
   }
   var fermoAzioni = [];
   function fermo(titolo, testo, pulsanti) {
@@ -812,7 +871,11 @@
         if (!s || !c.parentNode) return;
         nome.textContent = s.tipo === 'puntata' && s.serie ? s.serie.titolo + ' · S' + s.stagione + ' E' + s.episodio : s.titolo + (s.anno ? ' (' + s.anno + ')' : '');
         var ref = s.img.landscape || s.img.fanart || s.img.poster;
-        if (ref) mettiImg(q, x.d, ref, 448, 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
+        // l'immagine solo quando la carta e' vicina alla scelta (come le altre carte)
+        if (ref) {
+          c.carica = function () { mettiImg(q, x.d, ref, 448, 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; }); };
+          caricaVicine();
+        }
       });
     }
     return c;
@@ -870,7 +933,7 @@
     // il logo del titolo: quelli di Jellyfin dritti in un <img> (ridotti dal server), nelle file dopo una pausa di 220 ms;
     // quelli delle chiavette dalla tela (se gia' pronti arrivano subito: niente titolo scritto che lampeggia)
     if (x.logo && x.logo.jf && serv.gettone) {
-      var url0 = urlImmagine('', x.logo, 680, 260, true);
+      var url0 = urlImmagine('', x.logo, 500, 192, true);
       setTimeout(function () {
         if (g !== eroeGiro) return;
         var im0 = el('img');
@@ -879,7 +942,7 @@
         im0.src = url0;
       }, x.nuovo ? 0 : 220);
     } else if (x.logo) {
-      piccola(x.d || '', x.logo, 680, 260, function (url) {
+      piccola(x.d || '', x.logo, 500, 192, function (url) {
         if (!url || g !== eroeGiro) return;
         var im = el('img');
         im.alt = x.titolo || '';
@@ -1462,12 +1525,24 @@
   function caricaVicineOra() {
     if (!pag) return;
     // (nelle pagine semplici, come la scheda, sotto la scelta si vedono anche due file)
-    var da = pag.disponi ? pag.r : Math.max(0, pag.r - 1), a = pag.disponi ? pag.r + 1 : pag.r + 2;
+    var da = pag.disponi ? pag.r : Math.max(0, pag.r - 1), a = pag.disponi ? pag.r + 1 : pag.r + 2, vicine = [];
     for (var r = da; r <= Math.min(pag.righe.length - 1, a); r++) {
       var R = pag.righe[r], k0 = pag.disponi && r === pag.r ? R.k : Math.max(0, R.k - 1);
       for (var k = k0; k < Math.min(quanteIn(R), R.k + 9); k++) {
         var c = R.voci[k];
-        if (c && c.carica) { var f = c.carica; c.carica = null; f(); }
+        if (!c) continue;
+        vicine.push(c);
+        if (c.carica) { c.caricaImg = c.carica; c.carica = null; c.caricata = true; c.caricaImg(); }
+      }
+    }
+    // le altre carte ancora disegnate (la fila sopra, quelle piu' in la') lasciano andare le immagini: sul TV restano
+    // decodificate solo quelle che si vedono, piu' una fila (la memoria serve al 4K del film)
+    for (var r2 = 0; r2 < pag.righe.length; r2++) {
+      var R2 = pag.righe[r2], l = R2.crea ? R2.voci : vociDi(R2.box);
+      for (var i in l) {
+        if (!Object.prototype.hasOwnProperty.call(l, i)) continue;
+        var c2 = l[i];
+        if (c2 && c2.caricata === true && vicine.indexOf(c2) === -1) lasciaCarta(c2);
       }
     }
   }
@@ -1538,7 +1613,7 @@
     carta('tetto', 'ingranaggio', 'Tetto del TV', tettoTv.mbps + ' Mbps' + (tettoTv.scelta === 'prova' ? ' · misurato' : ''),
       'Quanti Mbps il TV regge senza scatti: oltre, l\'app avvisa e il Mac toglie i picchi.', apriTetto);
     carta('velocita', 'audio', 'Velocità del TV', 'per l\'audio DTS', 'Quanto è veloce questo TV per convertire da solo l\'audio DTS e TrueHD.', misuraVelocita);
-    carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', 'Il trailer parte da solo, senza audio, dietro la scheda del film.', function () {
+    if (TRAILER_DIETRO) carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', 'Il trailer parte da solo, senza audio, dietro la scheda del film.', function () {
       prefs.anteprime = !prefs.anteprime;
       prefs.anteprimeScelte = true;
       salvaPrefs();
@@ -1796,11 +1871,11 @@
     var s = x.s, it = x.it, logo = $('sc-logo'), ms = JF.sorgente(it), L0 = lettiTv();
     var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
     $('sc-sopratitolo').textContent = s.tipo === 'puntata' ? 'Stagione ' + s.stagione + ' · Puntata ' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '';
-    if (!x.logoFatto) {
-      x.logoFatto = true;
+    if (x.logoFatto !== chiaveLogo(s)) {
+      x.logoFatto = chiaveLogo(s);
       svuota(logo);
       logo.appendChild(el('h1', '', titolo));
-      if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+      if (s.img.logo) mettiImg(logo, '', s.img.logo, 500, 192, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
     }
     metaDi($('sc-meta'), s, null, '');
     if (s.durata) $('sc-meta').appendChild(el('span', '', finisceAlle(s.durata * 60 - (riprendibileJf(s) ? s.punto : 0))));
@@ -1956,7 +2031,7 @@
     var s = x.s, logo = $('sc-logo');
     svuota(logo);
     logo.appendChild(el('h1', '', s.titolo));
-    if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+    if (s.img.logo) mettiImg(logo, '', s.img.logo, 500, 192, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
     $('sc-sopratitolo').textContent = 'Serie' + (x.stagioni.length ? ' · ' + x.stagioni.length + (x.stagioni.length === 1 ? ' stagione' : ' stagioni') : '');
     metaDi($('sc-meta'), s, null, '');
     $('sc-trama').textContent = s.trama;
@@ -2053,7 +2128,7 @@
   // al 1080p (un film HDR accenderebbe l'HDR del TV sotto le scritte)
   function preparaTrailer(x) {
     fermaTrailer();
-    if (!prefs.anteprime || !x.it || x.it.Type === 'Series') return;
+    if (!TRAILER_DIETRO || !prefs.anteprime || !x.it || x.it.Type === 'Series') return;
     trailer.timer = setTimeout(function () {
       if (sch !== x || schermo !== 'scheda' || fermoAperto()) return;
       function parti(id, da) {
@@ -2788,16 +2863,19 @@
       });
     });
   }
+  // quale logo ha la scheda (o nessuno): si rifa' solo quando cambia. La scheda corta della chiavetta arriva senza, e quella
+  // piena col logo; tornando dal lettore (che lascia andare le immagini) si rifa' comunque (logoFatto = false)
+  function chiaveLogo(s) { var l = s && s.img ? s.img.logo : null; return l ? 'logo:' + l.p + '|' + (l.k === undefined ? '' : l.k) : 'titolo'; }
   function disegnaScheda(x) {
     var s = x.s, d = x.d, info = x.info, logo = $('sc-logo');
     var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
     $('sc-sopratitolo').textContent = s.tipo === 'puntata' ? 'Stagione ' + s.stagione + ' · Puntata ' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') :
       s.collezione ? s.collezione : '';
-    if (!x.logoFatto) {
-      x.logoFatto = true;
+    if (x.logoFatto !== chiaveLogo(s)) {
+      x.logoFatto = chiaveLogo(s);
       svuota(logo);
       logo.appendChild(el('h1', '', titolo));
-      if (s.img.logo) mettiImg(logo, d, s.img.logo, 680, 260, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+      if (s.img.logo) mettiImg(logo, d, s.img.logo, 500, 192, true, function (si) { if (si && x.giro === schGiro) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
     }
     metaDi($('sc-meta'), s, info, '');
     if (info && info.durata) $('sc-meta').appendChild(el('span', '', finisceAlle(info.durata - (riprendibile(puntoDi(d, x.p, info.dim), info.durata) ? puntoDi(d, x.p, info.dim).t : 0))));
@@ -2930,7 +3008,7 @@
     svuota(logo);
     logo.appendChild(el('h1', '', serie.titolo || s.titolo));
     var loghi = (s.serie && s.serie.img && s.serie.img.logo) || s.img.logo;
-    if (loghi) mettiImg(logo, d, loghi, 680, 260, true, function (si) { if (si) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
+    if (loghi) mettiImg(logo, d, loghi, 500, 192, true, function (si) { if (si) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
     $('sc-sopratitolo').textContent = 'Serie' + (x.stagioni.length ? ' · ' + x.stagioni.length + (x.stagioni.length === 1 ? ' stagione' : ' stagioni') : '');
     metaDi($('sc-meta'), serie, null, '');
     $('sc-trama').textContent = serie.trama || s.trama || '';
@@ -3336,7 +3414,8 @@
       prefs.qualita = 'orig';
       salvaPrefs();
       x.jf.q = 'orig';
-      ricaricaJf({ testo: 'Questa qualità non va sul TV: riparto in Originale' });
+      // (con l'audio che era scelto: se no tornerebbe quello di partenza)
+      ricaricaJf({ a: audioPerJf(x), testo: 'Questa qualità non va sul TV: riparto in Originale' });
       return;
     }
     var azioni = [{ testo: 'Riprova', fn: function () { chiudiFermo(); if (L === x) { x.errori = 0; carica(t); } } }];
@@ -3347,7 +3426,7 @@
         prefs.qualita = 'orig';
         salvaPrefs();
         x.jf.q = 'orig';
-        ricaricaJf({ testo: 'Qualità: Originale' });
+        ricaricaJf({ a: audioPerJf(x), testo: 'Qualità: Originale' });
       } });
     }
     azioni.push({ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } });
@@ -3839,7 +3918,13 @@
   function anteprimaBarra(t, f) {
     var an = $('osd-anteprima'), tp = L && L.jf ? L.jf.tp : null, te = $('osd-tessera'), ci = $('osd-capitolo');
     var cap = t >= 0 && !tp ? capitoloA(t) : null, img = cap && cap.img && serv.gettone ? cap.img : null;
-    if (t < 0 || (!tp && !img)) { if (!an.hidden) an.hidden = true; return; }
+    if (t < 0 || (!tp && !img)) {
+      if (!an.hidden) an.hidden = true;
+      // il foglio di tessere (fino a 3200x1800: 23 MB decodificati, mentre gira il 4K) si lascia andare finito lo scorrimento
+      if (te.getAttribute('data-u')) { te.style.backgroundImage = 'none'; te.removeAttribute('data-u'); }
+      if (ci.getAttribute('src')) { ci.removeAttribute('src'); ci.hidden = true; }
+      return;
+    }
     var W = window.innerWidth, h = Math.round(window.innerHeight * 0.24), w;
     if (tp) {
       var ts = JF.tessera(tp, t), sc = h / ts.h;
