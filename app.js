@@ -37,6 +37,8 @@
     return s;
   }
   var ICONE = {
+    // barre sotto un tetto: i picchi tagliati (il limitatore del Mac)
+    picchi: 'M4 9h40v3H4zM6 30h4v10H6zM12 22h4v18h-4zM18 15h4v25h-4zM24 15h4v25h-4zM30 24h4v16h-4zM36 31h4v9h-4z',
     disco: 'M8 30h32l-4-18H12zm0 4v6h32v-6zm26 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z',
     chiavetta: 'M18 4h12v8h4v26a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V12h4zm4 4v4h4V8z',
     cartella: 'M4 10a4 4 0 0 1 4-4h11l4 5h17a4 4 0 0 1 4 4v23a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z',
@@ -711,6 +713,12 @@
       if (poi) poi();
     });
   }
+  // il limitatore del Mac (mac/ nel servizio): toglie i picchi dei film troppo pesanti; la chiave la tiene il servizio
+  var mac = { stato: null };
+  function macAttivo() { return !!(mac.stato && mac.stato.collegato); }
+  function macCaricaStato(poi) {
+    chiedi('mac/stato').then(function (r) { mac.stato = r; if (poi) poi(); }, function () { mac.stato = null; if (poi) poi(); });
+  }
   // per Jellyfin decide il server (le sue soglie: un punto lo salva solo se vale la pena riprendere)
   function riprendibileJf(s) { return !!s && !s.visto && s.punto > 1 && (!s.durata || s.punto < s.durata * 60 - 1); }
   function sottoJf(s) {
@@ -874,6 +882,8 @@
       carta('jellyfin', 'jellyfin', jfAttivo() ? 'Jellyfin · ' + (st.server.nome || 'server') : 'Collega Jellyfin',
         jfAttivo() ? (jf.errore === 'rete' ? 'non risponde' : 'collegato come ' + st.utente.nome) : 'film e serie dal Mac', function () { apriCollega(tornaInizio); });
     }
+    if (jfAttivo()) carta('mac', 'picchi', macAttivo() ? 'Senza picchi · Mac' : 'Collega il Mac', macAttivo() ? 'collegato' : 'toglie i picchi dei remux',
+      function () { apriCollegaMac(tornaInizio); });
     carta('velocita', 'ingranaggio', 'Velocità del TV', 'per l\'audio DTS', misuraVelocita);
     carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', function () {
       prefs.anteprime = !prefs.anteprime;
@@ -1449,11 +1459,11 @@
     (server || []).forEach(function (sv) {
       var c = el('div', 'carta altro'), q = el('div', 'quadro');
       c.setAttribute('data-tv', '');
-      q.appendChild(icona(ICONE.jellyfin));
+      q.appendChild(icona(sv.icona || ICONE.jellyfin));
       q.appendChild(el('div', 'stato', sv.indirizzo.replace(/^https?:\/\//, '')));
       c.appendChild(q);
       c.appendChild(el('div', 'nome', sv.nome || 'Jellyfin'));
-      c.addEventListener('click', function () { scegliServerJf(sv.indirizzo); });
+      c.addEventListener('click', function () { (sv.fn || scegliServerJf)(sv.indirizzo); });
       fs.appendChild(c);
     });
     nuovaPagina($('collega-corpo'));
@@ -1560,6 +1570,84 @@
           function () { messaggio('Non riesco a scollegare: riprova'); });
       } },
       { testo: 'Cambia server', fn: collegaCerca }]);
+  }
+
+  /* il limitatore ai picchi del Mac: si collega con un codice di 6 cifre che il Mac mostra (notifica e finestra del limitatore) */
+  function apriCollegaMac(indietro) {
+    if (indietro) coll.indietro = indietro;
+    clearInterval(dischiTimer);
+    mostra('collega');
+    sfondo(null);
+    $('qc-codice').hidden = true;
+    if (macAttivo()) macGestisci(); else macCerca();
+  }
+  function macIndietro() { coll.giro++; coll.indietro(); }
+  function macCerca() {
+    var giro = ++coll.giro;
+    coll.fase = 'mac';
+    var base = [{ testo: 'Scrivi l\'indirizzo', fn: macScriviIndirizzo }, { testo: 'Indietro', fn: macIndietro }];
+    collegaPagina('Collega il Mac', 'Cerco il limitatore sul Mac di Jellyfin…', base);
+    chiedi('mac/cerca').then(function (r) {
+      if (giro !== coll.giro || schermo !== 'collega') return;
+      var l = (r.trovati || []).map(function (ind) { return { indirizzo: ind, nome: 'Limitatore', icona: ICONE.picchi, fn: macAbbina }; });
+      collegaPagina('Collega il Mac', l.length ? 'Scegli il Mac. Il limitatore toglie i picchi dei film troppo pesanti per la rete o per il TV.' :
+        'Non trovo il limitatore. Sul Mac accendilo (doppio clic su avvia-limitatore.command), poi scrivi qui l\'indirizzo del Mac con :8097.', base, l);
+    }, function (e) {
+      if (giro !== coll.giro) return;
+      collegaPagina('Collega il Mac', e.codice === 'assente' || e.codice === 'vecchio' ? 'Il servizio di questo TV non sa ancora parlare col Mac: riavvia il TV per aggiornarlo.' :
+        'Non riesco a cercare il Mac: riprova.', base);
+    });
+  }
+  function macScriviIndirizzo() {
+    var s0 = jf.stato && jf.stato.server ? jf.stato.server.indirizzo.replace(/^https?:\/\//, '').replace(/[:\/].*$/, '') + ':8097' : '';
+    HomeTV.chiediTesto({ titolo: 'Indirizzo del Mac (es. 192.168.1.20:8097)', valore: s0 }).then(function (t) { if (t) macAbbina(t); });
+  }
+  function macAbbina(indirizzo) {
+    var giro = ++coll.giro;
+    coll.macInd = indirizzo;
+    var altri = [{ testo: 'Scrivi il codice', fn: macCodice }, { testo: 'Un altro codice', fn: function () { macAbbina(indirizzo); } }, { testo: 'Indietro', fn: macIndietro }];
+    collegaPagina('Collega il Mac', 'Chiedo un codice al Mac…', [{ testo: 'Indietro', fn: macIndietro }]);
+    chiedi('mac/abbina', null, { indirizzo: indirizzo }).then(function () {
+      if (giro !== coll.giro || schermo !== 'collega') return;
+      collegaPagina('Collega il Mac', 'Sul Mac è comparso un codice di 6 cifre (in una notifica e nella finestra del limitatore). Scrivilo qui: vale 5 minuti.', altri);
+    }, function (e) {
+      if (giro !== coll.giro) return;
+      collegaPagina('Collega il Mac', e.codice === 'indirizzo' ? 'Indirizzo non valido.' : e.codice === 'limitatore' ? 'A quell\'indirizzo non risponde il limitatore.' :
+        e.codice === 'troppe' ? 'Troppi tentativi: riprova tra qualche minuto.' : e.codice === 'rete' ? 'Il Mac non risponde: è acceso? E il limitatore?' :
+        'Non riesco a collegarmi.', [{ testo: 'Riprova', fn: macCerca }, { testo: 'Indietro', fn: macIndietro }]);
+    });
+  }
+  function macCodice() {
+    var giro = coll.giro;
+    HomeTV.chiediTesto({ titolo: 'Il codice del Mac (6 cifre)', valore: '' }).then(function (t) {
+      if (!t || giro !== coll.giro) return;
+      chiedi('mac/codice', null, { codice: t }).then(function (r) {
+        mac.stato = r;
+        messaggio('Mac collegato: nel lettore, Giù › Qualità › Senza picchi', 5000);
+        macIndietro();
+      }, function (e) {
+        if (e.codice === 'scaduto') { messaggio('Codice scaduto: ne chiedo un altro', 4000); macAbbina(coll.macInd); return; }
+        messaggio(e.codice === 'codice' ? 'Codice sbagliato: riprova' : e.codice === 'rete' ? 'Il Mac non risponde' : 'Non riesco a collegarmi', 4500);
+      });
+    });
+  }
+  function macGestisci() {
+    var giro = ++coll.giro, st = mac.stato;
+    coll.fase = 'mac';
+    var pulsanti = [{ testo: 'Indietro', fn: macIndietro }, { testo: 'Scollega', fn: function () {
+      chiedi('mac/esci', null, {}).then(function (r) { mac.stato = r; messaggio('Mac scollegato'); macIndietro(); }, function () { messaggio('Non riesco a scollegare: riprova'); });
+    } }];
+    var base = 'Collegato al limitatore del Mac (' + st.server.indirizzo.replace(/^https?:\/\//, '') + '). Nel lettore di un film di Jellyfin: Giù › Qualità › Senza picchi.';
+    collegaPagina('Senza picchi · Mac', base, pulsanti);
+    chiedi('mac/stato', { vivo: 1 }).then(function (r) {
+      if (giro !== coll.giro || schermo !== 'collega') return;
+      mac.stato = r;
+      if (!r.collegato) { macCerca(); return; }
+      var c = r.mac && r.mac.cartelle || [];
+      collegaPagina('Senza picchi · Mac', base + '\n' + (!r.acceso ? 'Il Mac adesso non risponde: è acceso?' : c.length ?
+        'Cartelle che il Mac guarda: ' + c.map(function (x) { return x.nome + (x.esiste ? '' : ' (disco staccato?)'); }).join(', ') + '.' :
+        'Il Mac non guarda ancora nessuna cartella: aggiungila sul Mac (node limitatore.js cartella Film "/Volumes/T7/Film").'), pulsanti);
+    }, function () {});
   }
 
   /* ============================================================ una cartella: la griglia delle copertine
@@ -2427,7 +2515,9 @@
   }
   // la strada e le tracce per il pannello, nella forma delle chiavette (a: l'audio voluto, indice di Jellyfin)
   function stradaJf(x, t, a) {
-    var j = x.jf, q = { q: j.q, t: Math.round(t || 0), ms: j.ms || undefined };
+    var j = x.jf;
+    if (j.q === 'mac') { j.q = prefs.qualita || 'orig'; j.giroMac = (j.giroMac || 0) + 1; }
+    var q = { q: j.q, t: Math.round(t || 0), ms: j.ms || undefined };
     if (j.q === 'auto') q.mbps = j.mbps || undefined;
     if (a !== undefined && a !== null) q.a = a;
     return chiedi('jf/guarda/' + j.id, q).then(function (g) {
@@ -2479,7 +2569,7 @@
     if (evento === 'inizio') { if (j.partito) evento = 'avanti'; j.partito = true; }
     else if (!j.partito) return;
     var corpo = { ItemId: j.id, MediaSourceId: j.ms, PlaySessionId: j.sessione, PositionTicks: JF.ticks(t !== undefined ? t : v.currentTime),
-      IsPaused: !!v.paused, IsMuted: false, CanSeek: true, PlayMethod: j.modo === 'diretto' || j.modo === 'file' ? 'DirectPlay' : j.modo === 'copia' ? 'DirectStream' : 'Transcode' };
+      IsPaused: !!v.paused, IsMuted: false, CanSeek: true, PlayMethod: j.modo === 'diretto' || j.modo === 'file' ? 'DirectPlay' : j.modo === 'copia' || j.modo === 'mac' ? 'DirectStream' : 'Transcode' };
     if (j.modo !== 'diretto') corpo.AudioStreamIndex = x.audio;
     if (evento === 'fine') j.partito = false;
     chiediJf(evento === 'inizio' ? 'Sessions/Playing' : evento === 'fine' ? 'Sessions/Playing/Stopped' : 'Sessions/Playing/Progress', null, corpo).then(null, function () {});
@@ -2520,8 +2610,47 @@
     });
   }
   function j_tp(x) { x.jf.tp = JF.trickplay(x.jf.it, x.jf.ms); }
+  // il tetto per il limitatore: 80 Mbps, o il 70% della rete se e' stata misurata (Automatica)
+  function tettoMac(j) { return j && j.mbps ? Math.max(10, Math.min(80, Math.round(j.mbps * 0.7))) : 80; }
+  // "Senza picchi": lo stesso file preparato dal limitatore del Mac (HLS "copia + picchi"). Il film continua mentre il Mac
+  // lavora; si passa all'HLS dallo stesso punto quando ne e' pronto abbastanza
+  function limitaJf() {
+    var x = L;
+    if (!x || !x.jf) return;
+    var j = x.jf, giro = j.giroMac = (j.giroMac || 0) + 1, tetto = tettoMac(j);
+    messaggio('Chiedo al Mac la versione senza picchi…', 3000);
+    (function prova() {
+      if (L !== x || j.giroMac !== giro) return;
+      chiedi('jf/limita/' + j.id, { ms: j.ms, tetto: tetto }).then(function (r) {
+        if (L !== x || j.giroMac !== giro) return;
+        if (!r.serve && r.pronto) { messaggio('Questo film non ha picchi oltre ' + tetto + ' Mbps: va bene com\'è', 5000); return; }
+        var t = v.currentTime || 0;
+        if (r.pronto && r.url && (r.completo || r.secondiPronti > t + 30)) { passaAlMac(x, r); return; }
+        messaggio(r.fase === 'analisi' ? 'Il Mac guarda i picchi del film… ' + Math.round(r.lavoro && r.lavoro.percentuale || 0) + '%' :
+          'Il Mac prepara la versione senza picchi… ' + Math.round(r.secondiPronti || 0) + ' s pronti', 2600);
+        setTimeout(prova, 2000);
+      }, function (e) {
+        if (L !== x || j.giroMac !== giro) return;
+        messaggio(e.codice === 'cartella' ? 'Il Mac non vede questo film: aggiungi la sua cartella al limitatore' :
+          e.codice === 'mac' ? 'Il Mac non riconosce più questo TV: ricollegalo (Altro › Senza picchi)' : e.codice === 'rete' ? 'Il Mac non risponde' :
+          'Il Mac non riesce a preparare questo film', 6000);
+      });
+    })();
+  }
+  function passaAlMac(x, r) {
+    var j = x.jf, t = v.currentTime || x.daQui || 0, pausa = v.paused;
+    riportaJf('fine', t);
+    fermaConversione({ modo: j.modo, sessione: j.sessione });
+    j.q = 'mac';
+    j.modo = 'mac';
+    j.url = r.url;
+    disegnaBadgeOsd();
+    carica(t, pausa);
+    messaggio('Senza picchi: il Mac tiene il film sotto ' + r.tetto + ' Mbps' + (r.ricodifica ? ' (rifatto il ' + Math.max(1, Math.round(r.ricodifica * 100)) + '%)' : ''), 4500);
+  }
   function cambiaQualita(q) {
     if (!L || !L.jf) return;
+    if (q === 'mac') { limitaJf(); return; }
     prefs.qualita = q;
     salvaPrefs();
     var x = L, nome = (QUALITA_JF.filter(function (z) { return z.id === q; })[0] || {}).nome || q;
@@ -2814,15 +2943,18 @@
   function apriPannello(vecchio) {
     if (!L || !L.info) return;
     var i = L.info, cols = [], ignoto = sconosciuto(i);
-    cols.push({ titolo: 'Audio', voci: ignoto ? [{ testo: 'Audio del file', piccolo: 'lo sceglie il lettore del TV', attiva: true }] : i.audio.length ? i.audio.map(function (a) {
+    cols.push({ titolo: 'Audio', voci: ignoto ? [{ testo: 'Audio del file', piccolo: 'lo sceglie il lettore del TV', attiva: true }] :
+      L.jf && L.jf.modo === 'mac' ? [{ testo: 'Audio dal Mac', piccolo: 'per sceglierne un altro torna a Qualità › Originale', attiva: true }] : i.audio.length ? i.audio.map(function (a) {
       var conv = L.jf && (!a.letto || a.server);
       return { testo: nomeLingua(a.lingua) + (a.canali ? ' ' + canali(a.canali) : ''), piccolo: a.nomeCodec + (conv ? ' · lo converte il server' : a.letto ? (a.nome ? ' · ' + a.nome : '') : ' · il TV non lo legge'),
         attiva: a.num === L.audio, spenta: !a.letto && !L.jf, fn: function () { cambiaAudio(a.num); } };
     }).concat([{ testo: 'Ritardo audio', piccolo: 'non si può col lettore del TV: si potrà dal Mac', spenta: true }]) : [{ testo: 'Nessun audio', spenta: true }] });
     if (L.jf && !L.jf.trailer) {
       var j = L.jf, g = j.g || {};
-      cols.push({ titolo: 'Qualità', voci: QUALITA_JF.map(function (q) {
-        return { testo: q.nome, piccolo: q.id === 'orig' ? (g.mbps ? String(g.mbps).replace('.', ',') + ' Mbps · ' : '') + (j.modo === 'diretto' || j.modo === 'file' ? 'il file vero' : j.modo === 'copia' ? 'video originale' : 'convertito') :
+      var vociQ = QUALITA_JF.slice(), mo = g.modo || j.modo;
+      if (macAttivo()) vociQ.push({ id: 'mac', nome: 'Senza picchi', piccolo: j.q === 'mac' ? 'dal Mac, sotto ' + tettoMac(j) + ' Mbps' : 'il Mac toglie i picchi oltre ' + tettoMac(j) + ' Mbps' });
+      cols.push({ titolo: 'Qualità', voci: vociQ.map(function (q) {
+        return { testo: q.nome, piccolo: q.id === 'mac' ? q.piccolo : q.id === 'orig' ? (g.mbps ? String(g.mbps).replace('.', ',') + ' Mbps · ' : '') + (mo === 'diretto' || mo === 'file' ? 'il file vero' : mo === 'copia' ? 'video originale' : 'convertito') :
           q.id === 'auto' && j.mbps ? 'la rete fa ' + j.mbps + ' Mbps' : q.piccolo, attiva: j.q === q.id, fn: function () { cambiaQualita(q.id); } };
       }) });
     }
@@ -3166,6 +3298,7 @@
     var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash), mj = /#\/jf\/([0-9a-f]{32})(?:\?(.*))?$/.exec(location.hash);
     prendiPermesso().then(function () {
       apriInizio();
+      macCaricaStato();
       // Jellyfin: lo stato (server, utente, i codec del TV) e le file dell'inizio; dalla home un film di Jellyfin riparte subito
       jfCaricaStato(function () {
         jfCaricaInizio(true);
