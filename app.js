@@ -28,34 +28,48 @@
   }
   function svuota(e) { while (e.firstChild) e.removeChild(e.firstChild); }
   var NS = 'http://www.w3.org/2000/svg';
-  function icona(d, classe) {
+  // le icone: tratti tondi su una griglia di 24 (pieno: riempite, come il play). x e' una voce di ICONE
+  function icona(x, classe) {
     var s = document.createElementNS(NS, 'svg'), p = document.createElementNS(NS, 'path');
-    s.setAttribute('viewBox', '0 0 48 48');
-    if (classe) s.setAttribute('class', classe);
-    p.setAttribute('d', d);
+    if (typeof x === 'string') x = { d: x };
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', 'ic' + (x && x.pieno ? ' pieno' : '') + (classe ? ' ' + classe : ''));
+    s.setAttribute('aria-hidden', 'true');
+    p.setAttribute('d', x ? x.d : '');
     s.appendChild(p);
     return s;
   }
   var ICONE = {
+    play: { d: 'M8 5.7v12.6a1 1 0 0 0 1.5.86l10-6.3a1 1 0 0 0 0-1.72l-10-6.3A1 1 0 0 0 8 5.7z', pieno: true },
+    pausa: { d: 'M6.5 5h3.6v14H6.5zM13.9 5h3.6v14h-3.6z', pieno: true },
+    info: { d: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5.5M12 7.7v.1' },
+    piu: { d: 'M12 5v14M5 12h14' },
+    spunta: { d: 'M5 12.5l4.5 4.5L19 7.5' },
+    lista: { d: 'M7 3.5h10a1 1 0 0 1 1 1v16l-6-4.2-6 4.2v-16a1 1 0 0 1 1-1z' },
+    ripeti: { d: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 3.5v4h4' },
+    cerca: { d: 'M10.5 17.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20.5 20.5l-5-5' },
+    casa: { d: 'M3.5 10.5L12 3.8l8.5 6.7V20a1 1 0 0 1-1 1H15v-6.5H9V21H4.5a1 1 0 0 1-1-1z' },
+    film: { d: 'M4.5 3.5h15a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1zM8 3.5v17M16 3.5v17M3.5 8H8M3.5 12H8M3.5 16H8M16 8h4.5M16 12h4.5M16 16h4.5' },
+    serie: { d: 'M3.5 7.5h17a1 1 0 0 1 1 1v10.5a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1zM8 3l4 4.5L16 3' },
+    stagione: { d: 'M3.5 7.5h17a1 1 0 0 1 1 1v10.5a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1zM8 3l4 4.5L16 3' },
+    puntata: { d: 'M3.5 7.5h17a1 1 0 0 1 1 1v10.5a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1zM8 3l4 4.5L16 3' },
+    chiavetta: { d: 'M8 10h8v10a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 8 20zM9.5 2.5h5V10h-5zM11 5.5h.01M13 5.5h.01' },
+    disco: { d: 'M2.5 15l2.8-9.2a1 1 0 0 1 1-.8h11.4a1 1 0 0 1 1 .8l2.8 9.2M2.5 15v3.5a1 1 0 0 0 1 1h17a1 1 0 0 0 1-1V15M2.5 15h19M17.5 17.3h.01' },
+    cartella: { d: 'M3 6.5a1 1 0 0 1 1-1h5.2l2.2 2.5H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z' },
+    mac: { d: 'M5 5h14a1 1 0 0 1 1 1v9.5H4V6a1 1 0 0 1 1-1zM2 18.5h20' },
+    // il Mac dove gira Jellyfin: un server
+    jellyfin: { d: 'M4.5 4h15a1 1 0 0 1 1 1v4.5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM4.5 13.5h15a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-4.5a1 1 0 0 1 1-1zM7.5 7.2h.01M7.5 16.7h.01' },
     // barre sotto un tetto: i picchi tagliati (il limitatore del Mac)
-    picchi: 'M4 9h40v3H4zM6 30h4v10H6zM12 22h4v18h-4zM18 15h4v25h-4zM24 15h4v25h-4zM30 24h4v16h-4zM36 31h4v9h-4z',
-    mac: 'M9 9h30a2 2 0 0 1 2 2v20H7V11a2 2 0 0 1 2-2zm2 4v14h26V13zM3 34h42v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z',
-    disco: 'M8 30h32l-4-18H12zm0 4v6h32v-6zm26 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4z',
-    chiavetta: 'M18 4h12v8h4v26a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V12h4zm4 4v4h4V8z',
-    cartella: 'M4 10a4 4 0 0 1 4-4h11l4 5h17a4 4 0 0 1 4 4v23a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z',
-    film: 'M6 8h36v32H6zm4 4v4h4v-4zm0 8v8h4v-8zm0 12v4h4v-4zm24-20v4h4v-4zm0 8v8h4v-8zm0 12v4h4v-4zM18 12v24h12V12z',
-    serie: 'M4 12h40v26H4zm4 4v18h32V16zM16 4l8 7 8-7 2 2-7 6h-6l-7-6z',
-    play: 'M14 8l26 16-26 16z',
-    pausa: 'M12 8h8v32h-8zm16 0h8v32h-8z',
-    spunta: 'M9 25l10 10 20-22',
-    ripeti: 'M24 8a16 16 0 1 1-15.6 19.6l3.9-.9A12 12 0 1 0 24 12v6l-9-8 9-8z',
-    audio: 'M6 18h8l10-8v28l-10-8H6zm24-2a10 10 0 0 1 0 16l-2-3a6 6 0 0 0 0-10zm4-6a18 18 0 0 1 0 28l-2-3a14 14 0 0 0 0-22z',
-    testo: 'M4 10h40v28H4zm4 4v20h32V14zm4 12h10v4H12zm14 0h10v4H26zm-14-6h24v4H12z',
-    cerca: 'M20 6a14 14 0 0 1 11.1 22.5l10.7 10.7-2.8 2.8-10.7-10.7A14 14 0 1 1 20 6zm0 4a10 10 0 1 0 0 20 10 10 0 0 0 0-20z',
-    jellyfin: 'M24 6c-5 0-21 29-18.6 33.6S42.6 44.2 42.6 39.6 29 6 24 6zm0 9c3 0 11 17.5 9.8 20S15.4 37.5 14.2 35 21 15 24 15zm0 7c-1.6 0-5.3 9.6-4.6 11s8.6 1.4 9.2 0S25.6 22 24 22z',
-    cuore: 'M24 42l-3-2.7C10.4 29.8 4 24 4 16.8 4 11 8.5 6.5 14.2 6.5c3.3 0 6.5 1.6 8.6 4 .5.6 1.9.6 2.4 0 2.1-2.4 5.3-4 8.6-4C39.5 6.5 44 11 44 16.8c0 7.2-6.4 13-17 22.5z',
-    trailer: 'M6 10h36v28H6zm14 7v14l11-7z',
-    ingranaggio: 'M27 4l1.2 5.1a15 15 0 0 1 3.6 2.1l5-1.6 3 5.2-3.8 3.6a15 15 0 0 1 0 4.2l3.8 3.6-3 5.2-5-1.6a15 15 0 0 1-3.6 2.1L27 44h-6l-1.2-5.1a15 15 0 0 1-3.6-2.1l-5 1.6-3-5.2 3.8-3.6a15 15 0 0 1 0-4.2L8.2 21.8l3-5.2 5 1.6a15 15 0 0 1 3.6-2.1L21 4zm-3 13a7 7 0 1 0 0 14 7 7 0 0 0 0-14z'
+    picchi: { d: 'M3 4.5h18M5.5 20v-5M9.5 20v-9M13.5 20v-9M17.5 20v-6' },
+    // un contagiri: la velocita' del TV
+    ingranaggio: { d: 'M3.6 17.5a9 9 0 1 1 16.8 0M12 13.5l4-4.5M12 14.2v.1' },
+    trailer: { d: 'M3.5 5.5h17a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1zM10 9.3v5.4l4.6-2.7z' },
+    audio: { d: 'M3.5 9.5h3.5L12 5.5v13l-5-4H3.5zM15.5 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11' },
+    testo: { d: 'M3.5 5.5h17a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1zM6.5 14.5h4M13 14.5h4.5M6.5 11h11' },
+    cuore: { d: 'M12 20s-7.6-4.6-9-9.6C2.1 7.1 4.2 4.5 7.3 4.5c2 0 3.6 1.1 4.7 2.8 1.1-1.7 2.7-2.8 4.7-2.8 3.1 0 5.2 2.6 4.3 5.9C19.6 15.4 12 20 12 20z' },
+    avanti: { d: 'M9 5l7 7-7 7' },
+    impostazioni: { d: 'M4 7h9.5M18 7h2M4 17h2.5M10.5 17H20M15.8 4.8v4.4M8.5 14.8v4.4' },
+    occhio: { d: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' }
   };
   function due(n) { return (n < 10 ? '0' : '') + n; }
   function tempo(s) {
@@ -230,8 +244,9 @@
   /* ============================================================ le immagini: ridotte su una tela, una alla volta */
 
   // il TV decodifica l'immagine originale una volta sola (al massimo 12 milioni di pixel, lo controlla il servizio) e
-  // poi tiene solo la piccola, come dataURL: in memoria al massimo 260 piccole
-  var imm = { cache: {}, ordine: [], coda: [], inVolo: false };
+  // poi tiene solo la piccola, come dataURL: in memoria al massimo circa 6 MB di piccole (si conta la misura, non il numero).
+  // Le immagini di Jellyfin no: arrivano gia' ridotte dal server e vanno dritte nella pagina (vedi mettiDritta)
+  var imm = { cache: {}, ordine: [], coda: [], inVolo: false, peso: 0 };
   // vivo: chi la vuole e' ancora nella pagina? (con le frecce tenute premute, le copertine gia' passate non si caricano)
   function piccola(d, ref, w, h, cb, tutta, vivo) {
     if (!ref || !ref.p || !serv.gettone) { cb(null); return; }
@@ -257,7 +272,9 @@
       im.src = ''; // la decodifica grande si puo' buttare
       imm.cache[x.k] = url;
       imm.ordine.push(x.k);
-      while (imm.ordine.length > 260) delete imm.cache[imm.ordine.shift()];
+      imm.peso += url ? url.length : 0;
+      // 3 milioni di caratteri (circa 6 MB nella memoria della pagina): via le piu' vecchie
+      while (imm.peso > 3e6 && imm.ordine.length > 1) { var vk = imm.ordine.shift(); imm.peso -= (imm.cache[vk] || '').length; delete imm.cache[vk]; }
       for (var i = 0; i < x.cb.length; i++) { try { x.cb[i](url); } catch (e) {} }
       imm.inVolo = false;
       setTimeout(prossimaImg, 0);
@@ -297,8 +314,42 @@
     for (var i = 3; i < d.length; i += 16) { tot++; if (d[i] > 40) visti++; }
     return tot > 0 && visti / tot >= 0.02;
   }
+  // le immagini di Jellyfin: ridotte dal server alla misura giusta e tenute dal browser (il ponte le da' per un giorno), quindi
+  // niente tela: un <img> che compare quando e' pronto. Al massimo quattro in volo, prima le ultime chieste (le frecce tenute
+  // premute non riempiono la coda di copertine gia' passate)
+  var dritte = { coda: [], inVolo: 0 };
+  function mettiDritta(box, ref, w, h, poi) {
+    dritte.coda.push({ box: box, url: urlImmagine('', ref, w, h, false), poi: poi || null });
+    setTimeout(prossimaDritta, 0); // al giro dopo: chi l'ha chiesta intanto mette la casella nella pagina
+  }
+  function prossimaDritta() {
+    while (dritte.inVolo < 4 && dritte.coda.length) {
+      var x = dritte.coda.pop();
+      if (!x.box.parentNode || !document.body.contains(x.box)) { if (x.poi) x.poi(false); continue; }
+      dritte.inVolo++;
+      (function (x) {
+        var im = el('img'), fatto = false, t = null;
+        function fine(si) {
+          if (fatto) return;
+          fatto = true;
+          clearTimeout(t);
+          dritte.inVolo--;
+          if (si) im.className = 'on'; else if (im.parentNode) im.parentNode.removeChild(im);
+          if (x.poi) { try { x.poi(si); } catch (e) {} }
+          prossimaDritta();
+        }
+        im.onload = function () { fine(true); };
+        im.onerror = function () { fine(false); };
+        t = setTimeout(function () { fine(false); }, 15000);
+        im.alt = '';
+        im.src = x.url;
+        x.box.insertBefore(im, x.box.firstChild ? x.box.firstChild.nextSibling : null); // sopra la copertina disegnata, sotto barre e segni
+      })(x);
+    }
+  }
   // un'immagine dentro un riquadro: compare con una dissolvenza quando e' pronta
   function mettiImg(box, d, ref, w, h, tutta, poi) {
+    if (ref && ref.jf && !tutta && serv.gettone) { mettiDritta(box, ref, w, h, poi); return; }
     piccola(d, ref, w, h, function (url) {
       if (!url || !box.parentNode) { if (poi) poi(false); return; }
       var im = el('img');
@@ -308,11 +359,11 @@
       if (poi) poi(true);
     }, tutta, function () { return !!box.parentNode && document.body.contains(box); });
   }
-  // la copertina disegnata: titolo pulito, anno, un colore dal nome (mai un riquadro grigio)
+  // la copertina disegnata: titolo pulito, anno, un colore spento dal nome (mai un riquadro grigio)
   function finta(titolo, anno, tipo) {
     var c = el('div', 'finta'), h = tinta(titolo);
-    c.style.backgroundImage = 'linear-gradient(155deg, hsl(' + h + ',46%,36%) 0%, hsl(' + ((h + 38) % 360) + ',52%,15%) 100%)';
-    c.appendChild(icona(tipo === 'cartella' ? ICONE.cartella : tipo === 'serie' || tipo === 'stagione' || tipo === 'puntata' ? ICONE.serie : ICONE.film, 'ico'));
+    c.style.backgroundImage = 'linear-gradient(160deg, hsl(' + h + ',26%,24%) 0%, hsl(' + ((h + 24) % 360) + ',30%,11%) 100%)';
+    c.appendChild(icona(ICONE[tipo] || ICONE.film, 'ico'));
     c.appendChild(el('div', 'ft', titolo));
     if (anno) c.appendChild(el('div', 'fa', String(anno)));
     return c;
@@ -321,33 +372,55 @@
   /* ---------------------------------------------------------- lo sfondo */
 
   var sfondoChiave = null, sfondoA = true, sfondoTimer = null;
-  // nitido: il fanart della scheda (960x540); se no la copertina della voce scelta, sfocata (32x18 ingrandita)
+  // nitido: l'immagine grande del film (Jellyfin 1280x720, le chiavette 960x540); se no la copertina della voce scelta,
+  // sfocata (32x18 ingrandita)
   function sfondo(d, ref, nitido, subito) {
     var k = ref ? d + '|' + ref.p + '|' + ref.k + '|' + (nitido ? 1 : 0) : '';
     if (k === sfondoChiave) return;
     sfondoChiave = k;
     clearTimeout(sfondoTimer);
-    if (!ref) { mettiSfondo(null, false); return; }
+    if (!ref) { mettiSfondo(null, ''); return; }
     // con le frecce tenute premute: solo quando ci si ferma
     sfondoTimer = setTimeout(function () {
-      piccola(d, ref, nitido ? 960 : 32, nitido ? 540 : 18, function (url) { if (sfondoChiave === k) mettiSfondo(url, nitido); });
-    }, subito ? 0 : 280);
+      if (ref.jf && nitido && serv.gettone) {
+        // l'immagine si scarica prima, poi passa sopra la vecchia con una dissolvenza
+        var url = urlImmagine('', ref, 1280, 720, false), im = new Image();
+        im.onload = function () { if (sfondoChiave === k) mettiSfondo(url, 'nitido'); };
+        im.onerror = function () { if (sfondoChiave === k) mettiSfondo(null, ''); };
+        im.src = url;
+        return;
+      }
+      piccola(d, ref, nitido ? 960 : 32, nitido ? 540 : 18, function (url) { if (sfondoChiave === k) mettiSfondo(url, nitido ? 'nitido' : 'sfocato'); });
+    }, subito ? 0 : 260);
   }
-  function mettiSfondo(url, nitido) {
+  var svuotaTimer = null;
+  function mettiSfondo(url, tipo) {
     var nuovo = $(sfondoA ? 'sfondo-b' : 'sfondo-a'), vecchio = $(sfondoA ? 'sfondo-a' : 'sfondo-b');
     sfondoA = !sfondoA;
-    nuovo.style.backgroundImage = url ? 'url(' + url + ')' : 'none';
-    nuovo.className = 'strato' + (url ? ' on' : '') + (nitido ? ' nitido' : '');
-    vecchio.className = 'strato' + (/nitido/.test(vecchio.className) ? ' nitido' : '');
+    nuovo.style.backgroundImage = url ? 'url("' + url + '")' : 'none';
+    nuovo.className = 'strato' + (url ? ' on' : '') + (tipo ? ' ' + tipo : '');
+    vecchio.className = 'strato' + (/sfocato/.test(vecchio.className) ? ' sfocato' : '');
+    // finita la dissolvenza lo strato spento lascia andare la sua immagine (sul TV: una 1280x720 decodificata in meno)
+    clearTimeout(svuotaTimer);
+    svuotaTimer = setTimeout(function () { if (!/\bon\b/.test(vecchio.className)) vecchio.style.backgroundImage = 'none'; }, 800);
   }
+  // come si guarda lo sfondo: eroe (tutta l'immagine), righe (piu' piccola in alto a destra), scheda, piatto (senza immagine)
+  function modoSfondo(m) { $('sfondo').className = m; }
 
   /* ============================================================ memoria (64 KB per app, tenuta dalla home) */
 
-  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: true };
+  // le anteprime dietro la scheda (un secondo video da decodificare): accese di base solo sui TV dal 2021 (Chromium 76 in su)
+  var chromium = /Chrome\/(\d+)/.exec(navigator.userAgent);
+  var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: !chromium || +chromium[1] >= 76,
+    anteprimeScelte: false };
   var punti = {}; // chiave -> { d, p, dim, nome, t, dur, quando, finito }
   var cartelle = {}; // "disco|cartella" -> { a: lingua dell'audio, s: lingua dei sottotitoli o 'no', quando }: le puntate
   function leggiMemoria() {
+    // (le anteprime salvate valgono solo se scelte a mano: le versioni di prima salvavano tutto, anche il vecchio "accese")
+    var anteprime0 = prefs.anteprime;
     try { var x = JSON.parse(HomeTV.memoria.leggi('prefs') || '{}'); for (var k in x) if (Object.prototype.hasOwnProperty.call(prefs, k)) prefs[k] = x[k]; } catch (e) {}
+    // (un "false" salvato e' sempre una scelta a mano: prima il default era "accese")
+    if (prefs.anteprimeScelte !== true && prefs.anteprime === true) prefs.anteprime = anteprime0;
     try { punti = JSON.parse(HomeTV.memoria.leggi('punti') || '{}') || {}; } catch (e) { punti = {}; }
     try { cartelle = JSON.parse(HomeTV.memoria.leggi('cartelle') || '{}') || {}; } catch (e) { cartelle = {}; }
   }
@@ -408,6 +481,11 @@
     $('sfondo').hidden = nome === 'lettore';
     // il trailer dietro la scheda: solo li' (e mai insieme al lettore: un decoder alla volta)
     if (nome !== 'scheda') fermaTrailer();
+    // il banner che cambia film, la ricerca del Mac e il binario: solo all'inizio
+    if (nome !== 'inizio') { fermaVetrina(); benvFerma(); chiudiBinario(true); }
+    if (nome === 'scheda') modoSfondo('scheda');
+    else if (nome === 'libreria') modoSfondo('righe');
+    else if (nome === 'cerca' || nome === 'collega') modoSfondo('piatto');
   }
   var fermoAzioni = [];
   function fermo(titolo, testo, pulsanti) {
@@ -432,62 +510,119 @@
    * Inizio e scheda sono righe (pulsanti, file di carte): Su e Giu' cambiano riga, Sinistra e Destra la voce. La fila
    * scorre per tenere in vista la voce scelta, la pagina scorre per tenere in vista la riga; tutto con transform. */
 
-  var pag = null; // { corpo, righe: [{ box, voci, k, sezione, quando(el, k) }], r }
-  function nuovaPagina(corpo) { pag = { corpo: corpo, righe: [], r: 0 }; return pag; }
+  var pag = null; // { corpo, righe: [{ box, voci, k, sezione, quando(el, k), crea, n, passo }], r, disponi }
+  function nuovaPagina(corpo, disponi) { pag = { corpo: corpo, righe: [], r: 0, disponi: disponi || null }; return pag; }
+  // una riga: le sue voci (elementi), oppure una fila lunga "virtuale" (crea(i) fa la voce i, n quante sono, passo in vw):
+  // di quelle si disegnano solo le voci vicine a quella scelta, e solo nelle file vicine (100 film o 300 puntate restano leggeri)
   function aggiungiRiga(box, voci, opz) {
     opz = opz || {};
-    var R = { box: box, voci: voci, k: Math.max(0, Math.min(opz.k || 0, voci.length - 1)), sezione: opz.sezione || box, quando: opz.quando || null, chiave: opz.chiave || '' };
+    var n = opz.crea ? opz.n || 0 : voci.length;
+    // una fila virtuale nuova sullo stesso riquadro (la scheda rifa' le righe quando arriva altro): via le carte di prima
+    if (opz.crea) svuota(box);
+    var R = { box: box, voci: voci, k: Math.max(0, Math.min(opz.k || 0, n - 1)), sezione: opz.sezione || box, quando: opz.quando || null, chiave: opz.chiave || '',
+      crea: opz.crea || null, n: n, passo: opz.passo || 0 };
     pag.righe.push(R);
     return R;
+  }
+  function quanteIn(R) { return R.crea ? R.n : R.voci.length; }
+  function disegnaRiga(R) {
+    var da = Math.max(0, R.k - 3), a = Math.min(R.n - 1, R.k + 10), passo = window.innerWidth * R.passo, i;
+    for (i in R.voci) {
+      if (!Object.prototype.hasOwnProperty.call(R.voci, i) || (+i >= da && +i <= a)) continue;
+      var vecchia = R.voci[i];
+      if (vecchia && vecchia.parentNode) vecchia.parentNode.removeChild(vecchia);
+      delete R.voci[i];
+    }
+    for (i = da; i <= a; i++) {
+      if (R.voci[i]) continue;
+      var c = R.crea(i);
+      if (!c) continue;
+      c.style.left = Math.round(i * passo) + 'px';
+      R.box.appendChild(c);
+      R.voci[i] = c;
+    }
+  }
+  function svuotaRiga(R) {
+    for (var i in R.voci) if (Object.prototype.hasOwnProperty.call(R.voci, i) && R.voci[i] && R.voci[i].parentNode) R.voci[i].parentNode.removeChild(R.voci[i]);
+    R.voci = [];
   }
   function vociDi(box) { return Array.prototype.slice.call(box.children); }
   function sceltaPagina() { var R = pag && pag.righe[pag.r]; return R ? R.voci[R.k] || null : null; }
   function altezzaIn(e, corpo) { var y = 0; while (e && e !== corpo) { y += e.offsetTop; e = e.offsetParent; } return y; }
+  // la fila scorre: la voce scelta a sinistra (quelle prima spariscono), ma l'ultima resta attaccata al bordo destro
+  function scorriFila(R) {
+    if (!R.box || !/\bfila\b/.test(R.box.className)) return;
+    var W = window.innerWidth, e = R.voci[R.k], visibile = W * 0.924, passo = R.crea ? W * R.passo : 0;
+    if (!e) return;
+    var tot = R.crea ? R.n * passo - W * 0.0125 : R.box.scrollWidth, x0 = R.crea ? R.k * passo : e.offsetLeft;
+    var sposta = Math.max(0, Math.min(x0, tot - visibile));
+    R.box.style.transform = 'translateX(' + (-Math.round(sposta)) + 'px)';
+    var l = R.crea ? R.voci : vociDi(R.box);
+    for (var i in l) {
+      if (!Object.prototype.hasOwnProperty.call(l, i) || !l[i] || !l[i].classList) continue;
+      var x = R.crea ? +i * passo : l[i].offsetLeft;
+      if (x - sposta < -W * 0.02) l[i].classList.add('prima'); else l[i].classList.remove('prima');
+    }
+  }
   function evidenzia() {
     var vecchie = document.querySelectorAll('.sel');
-    for (var i = 0; i < vecchie.length; i++) if (!vecchie[i].classList.contains('v')) vecchie[i].classList.remove('sel');
+    for (var i = 0; i < vecchie.length; i++) if (!vecchie[i].classList.contains('v') && !vecchie[i].classList.contains('bv')) vecchie[i].classList.remove('sel');
     if (!pag) return;
-    var R = pag.righe[pag.r];
-    if (!R || !R.voci.length) return;
-    var e = R.voci[R.k];
-    e.classList.add('sel');
-    // la fila: la voce scelta a sinistra, ma l'ultima resta attaccata al bordo destro
-    if (R.box && /\bfila\b/.test(R.box.className)) {
-      var visibile = window.innerWidth * 0.92, tot = R.box.scrollWidth;
-      var sposta = Math.max(0, Math.min(e.offsetLeft - window.innerWidth * 0.015, tot - visibile));
-      R.box.style.transform = 'translateX(' + (-Math.round(sposta)) + 'px)';
+    // le file lunghe: disegnate solo intorno a quella scelta
+    for (var r = 0; r < pag.righe.length; r++) {
+      var Rr = pag.righe[r];
+      if (!Rr.crea) continue;
+      if (!pag.disponi || (r >= pag.r - 1 && r <= pag.r + 2)) { disegnaRiga(Rr); scorriFila(Rr); } else if (Rr.voci.length) svuotaRiga(Rr);
     }
-    // la pagina: la prima riga dall'alto; le altre tutte in vista
-    var sez = R.sezione, alto = altezzaIn(sez, pag.corpo), h = window.innerHeight;
-    var y = pag.r === 0 ? 0 : Math.max(0, alto + sez.offsetHeight - h * 0.93);
-    pag.corpo.style.transform = 'translateY(' + (-Math.round(y)) + 'px)';
-    var sch0 = pag.corpo.parentNode;
-    if (sch0 && sch0.classList) { if (y > 0) sch0.classList.add('scorso'); else sch0.classList.remove('scorso'); }
+    var R = pag.righe[pag.r];
+    if (!R || !quanteIn(R)) return;
+    var e = R.voci[R.k];
+    if (!e) return;
+    e.classList.add('sel');
+    scorriFila(R);
+    if (pag.disponi) pag.disponi(R, e);
+    else {
+      // la pagina: la prima riga dall'alto; le altre tutte in vista
+      var sez = R.sezione, alto = altezzaIn(sez, pag.corpo), h = window.innerHeight;
+      var y = pag.r === 0 ? 0 : Math.max(0, alto + sez.offsetHeight - h * 0.93);
+      pag.corpo.style.transform = 'translateY(' + (-Math.round(y)) + 'px)';
+      var sch0 = pag.corpo.parentNode;
+      if (sch0 && sch0.classList) { if (y > 0) sch0.classList.add('scorso'); else sch0.classList.remove('scorso'); }
+      // nella scheda, scendendo, l'immagine si scurisce (le file si leggono meglio)
+      if (sch0 === $('schermo-scheda')) {
+        if (y > 0) { $('sfondo').classList.add('scuro'); fermaTrailer(); } else $('sfondo').classList.remove('scuro');
+      }
+    }
     if (R.quando) R.quando(e, R.k);
     caricaVicine();
   }
   function tastoPagina(a) {
+    if (schermo === 'inizio' && bin.aperto) return tastoBinario(a);
     if (!pag || !pag.righe.length) return a === 'up' || a === 'down' || a === 'left' || a === 'right';
     var R = pag.righe[pag.r];
     if (a === 'left' || a === 'right') {
       var k = R.k + (a === 'left' ? -1 : 1);
-      if (k >= 0 && k < R.voci.length) { R.k = k; pag.mosso = true; evidenzia(); }
+      if (k >= 0 && k < quanteIn(R)) { R.k = k; pag.mosso = true; evidenzia(); }
+      // il banner: oltre l'ultimo pulsante il film dopo; all'inizio di ogni fila, Sinistra apre il binario
+      else if (a === 'right' && R.chiave === 'eroe') { pag.mosso = true; cambiaSlide(1); }
+      else if (a === 'left' && schermo === 'inizio' && bin.voci.length) apriBinario();
       return true;
     }
     if (a === 'up' || a === 'down') {
       pag.mosso = true;
       var r = pag.r + (a === 'up' ? -1 : 1);
-      while (r >= 0 && r < pag.righe.length && !pag.righe[r].voci.length) r += a === 'up' ? -1 : 1;
+      while (r >= 0 && r < pag.righe.length && !quanteIn(pag.righe[r])) r += a === 'up' ? -1 : 1;
       if (r >= 0 && r < pag.righe.length) { pag.r = r; evidenzia(); }
       return true;
     }
     if (a === 'ok') { var e = sceltaPagina(); if (e) e.click(); return true; }
     return false;
   }
-  function pulsante(testo, ic, fn, piccolo) {
-    var b = el('div', 'pulsante');
+  // un pulsante: icona e scritta; tondo: solo l'icona, la scritta compare sotto quando e' scelto
+  function pulsante(testo, ic, fn, piccolo, tondo) {
+    var b = el('div', 'pulsante' + (tondo ? ' tondo' : ''));
     if (ic) b.appendChild(icona(ICONE[ic]));
-    b.appendChild(document.createTextNode(testo));
+    b.appendChild(el('span', 't', testo));
     if (piccolo) b.appendChild(el('small', '', piccolo));
     b.addEventListener('click', fn);
     return b;
@@ -495,7 +630,7 @@
 
   /* ============================================================ inizio: il film da riprendere, Continua, chiavette */
 
-  var dischi = [], dischiTimer = null, ultimiDischi = '', dischiErrore = null;
+  var dischi = [], dischiTimer = null, ultimiDischi = '', dischiErrore = null, dischiVisti = false;
   function nomeDisco(id) {
     var m = /^USBDrive([A-Z])(\d+)$/i.exec(id);
     if (m) return 'Chiavetta USB ' + m[1].toUpperCase() + (m[2] !== '1' ? ' · parte ' + m[2] : '');
@@ -518,99 +653,140 @@
   }
   function caricaDischi(primo) {
     chiedi('dischi').then(function (r) {
+      var prima = dischiErrore ? dischiErrore.codice : '';
       dischi = r.dischi || [];
       // un TV dove il servizio non sa ancora dove sono le chiavette (LG, oggi)
       dischiErrore = r.previsto === false ? erroreCon('nonPrevisto') : null;
       var firma = dischi.map(function (d) { return d.id; }).join('|');
-      if (!primo && firma === ultimiDischi) return;
+      // (si ridisegna anche quando un errore di prima e' passato: il messaggio deve sparire)
+      if (firma === ultimiDischi && prima === (dischiErrore ? dischiErrore.codice : '') && (!primo || dischiVisti)) return;
+      dischiVisti = true;
       if (!primo && dischi.length > ultimiDischi.split('|').filter(Boolean).length) messaggio('Chiavetta trovata');
       ultimiDischi = firma;
       if (schermo === 'inizio') disegnaInizio('tieni');
     }, function (e) {
       if (!primo && e.codice === 'servizio') return;
+      // lo stesso errore di 4 secondi fa: niente da ridisegnare (il banner non riparte da capo ogni volta)
+      if (dischiErrore && dischiErrore.codice === e.codice && !dischi.length) return;
       dischi = [];
       ultimiDischi = '';
       dischiErrore = e;
       if (schermo === 'inizio') disegnaInizio('tieni');
     });
   }
-  var eroeDi = null;
+  // vetrina: Jellyfin collegato (il banner coi film nuovi, le file con le informazioni della voce scelta in alto); semplice:
+  // senza Jellyfin (il riquadro "Guarda i film del tuo Mac" o un problema, poi le chiavette e Altro, una sotto l'altra)
+  var disegnando = false, attesaFinita = false;
   function disegnaInizio(scegli) {
+    disegnando = true;
+    try { disegnaInizio0(scegli); } finally { disegnando = false; }
+  }
+  function disegnaInizio0(scegli) {
     var vecchia = pag && pag.corpo === $('inizio-corpo') ? pag : memInizio, l = continuaTutti();
+    var vetrina = jfAttivo() && !!jf.dati, sch = $('schermo-inizio');
+    if (vetrina) sch.classList.add('vetrina'); else { sch.classList.remove('vetrina'); sch.classList.remove('righe'); }
+    // finche' non si sa se Jellyfin e' collegato non si mostra niente (niente riquadro del Mac che lampeggia a chi e' collegato),
+    // ma al massimo un secondo e mezzo (un servizio lento non lascia la pagina vuota)
+    $('inizio-corpo').style.visibility = jf.stato || dischiErrore || attesaFinita ? '' : 'hidden';
     // la fila Continua a guardare (chiavette e Jellyfin)
     var fc = $('fila-continua');
     svuota(fc);
+    fc.style.transform = '';
     $('sez-continua').hidden = !l.length;
     l.forEach(function (c) {
       if (!c.jf) { cartaContinua(c.x, fc); return; }
-      cartaJf(c.jf, 'orizzontale', fc, { sotto: 'Mancano ' + tempo(Math.max(0, c.s.durata * 60 - c.s.punto)),
-        apri: function () { guardaJf(c.jf, { ritorno: tornaInizio, t: c.s.punto }); } });
+      var s = c.s, resta = s.durata ? Math.max(0, s.durata * 60 - s.punto) : 0;
+      cartaJf(c.jf, 'oriz', fc, { sopra: c.prossimo ? 'Prossimo episodio' : 'Continua a guardare',
+        sotto: c.prossimo ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : resta ? 'Mancano ' + durataResta(resta) : '',
+        apri: function () { guardaJf(c.jf, { ritorno: tornaInizio, t: c.prossimo ? 0 : s.punto }); } });
     });
     var righeJf = disegnaRigheJf();
     // chiavette e dischi
     var fd = $('fila-dischi');
     svuota(fd);
+    fd.style.transform = '';
     $('sez-dischi').hidden = !dischi.length;
     dischi.forEach(function (d) {
-      var c = el('div', 'carta disco'), q = el('div', 'quadro');
-      c.setAttribute('data-chiave', 'disco:' + d.id);
-      c.setAttribute('data-tv', '');
-      q.appendChild(icona(/^USBDrive/i.test(d.id) ? ICONE.chiavetta : ICONE.disco));
-      c.appendChild(q);
-      c.appendChild(el('div', 'nome', nomeDisco(d.id)));
-      c.appendChild(el('div', 'sotto', 'Tutti i video'));
-      c.addEventListener('click', function () { apriLibreria(d.id, ''); });
+      var c = cartaPiccola('disco:' + d.id, /^USBDrive/i.test(d.id) ? 'chiavetta' : 'disco', nomeDisco(d.id), 'Tutti i video', function () { apriLibreria(d.id, ''); });
+      c.info = { sopra: 'Chiavetta', titolo: nomeDisco(d.id), trama: 'I video di questa chiavetta, cartella per cartella: il TV li legge direttamente.' };
       fd.appendChild(c);
     });
-    disegnaVuoto(l.length || jfAttivo());
+    var blocco = disegnaVuoto(l.length);
+    disegnaBenvenuto(!vetrina && !blocco && !!jf.stato && !jfAttivo());
     disegnaAltro();
-    // il film grande: l'ultimo da riprendere (poi quello scelto nella fila); senza, l'ultimo arrivato su Jellyfin
-    var primo = l[0] || (jf.dati && jf.dati.aggiunti[0] ? { jf: jf.dati.aggiunti[0].voci[0] } : null);
-    $('eroe').hidden = !primo;
-    if (primo) mostraEroeDi(primo);
-    // le righe: i pulsanti del film grande, Continua, Jellyfin, chiavette (o "Controlla di nuovo"), Altro
-    nuovaPagina($('inizio-corpo'));
-    if (primo) aggiungiRiga($('eroe-pulsanti'), vociDi($('eroe-pulsanti')), { sezione: $('eroe'), chiave: 'eroe' });
-    if (l.length) aggiungiRiga(fc, vociDi(fc), { sezione: $('sez-continua'), chiave: 'continua', quando: function (e, k) { mostraEroeDi(l[k]); } });
-    righeJf.forEach(function (R) { aggiungiRiga(R.box, vociDi(R.box), { sezione: R.sezione, chiave: R.chiave, quando: R.quando }); });
+    disegnaBinario();
+    // il banner: i film arrivati da poco (cambia da solo); senza, si parte dalle file
+    vetr.slide = vetrina ? slideDi(jf.dati) : [];
+    if (vetr.k >= vetr.slide.length) vetr.k = 0;
+    $('eroe').hidden = !vetrina;
+    if (!vetrina) { modoSfondo('piatto'); sfondo(null); fermaVetrina(); }
+    // le righe col telecomando: banner (o riquadro del Mac), Continua, Jellyfin, chiavette (o il problema), Altro
+    nuovaPagina($('inizio-corpo'), vetrina ? disponiVetrina : null);
+    if (vetr.slide.length) {
+      mostraSlide(vetr.k);
+      aggiungiRiga($('eroe-pulsanti'), vociDi($('eroe-pulsanti')), { sezione: $('eroe'), chiave: 'eroe' });
+    }
+    if (!$('benvenuto').hidden) aggiungiRiga($('benv-pulsanti'), vociDi($('benv-pulsanti')), { sezione: $('benvenuto'), chiave: 'benvenuto' });
+    if (l.length) aggiungiRiga(fc, vociDi(fc), { sezione: $('sez-continua'), chiave: 'continua' });
+    righeJf.forEach(function (R) { aggiungiRiga(R.box, R.crea ? [] : vociDi(R.box), { sezione: R.sezione, chiave: R.chiave, crea: R.crea, n: R.n, passo: R.passo }); });
     if (dischi.length) aggiungiRiga(fd, vociDi(fd), { sezione: $('sez-dischi'), chiave: 'dischi' });
-    if (!dischi.length) aggiungiRiga($('vuoto'), [$('vuoto-riprova')], { sezione: $('vuoto'), chiave: 'vuoto' });
+    if (blocco) aggiungiRiga($('vuoto'), [$('vuoto-riprova')], { sezione: $('vuoto'), chiave: 'vuoto' });
     aggiungiRiga($('fila-altro'), vociDi($('fila-altro')), { sezione: $('sez-altro'), chiave: 'altro' });
-    // la scelta resta dov'era (stessa riga, stessa voce); all'inizio sul film grande o sulle chiavette
-    if (vecchia && vecchia.mosso && scegli === 'tieni') {
+    // la scelta resta dov'era (stessa riga, stessa voce; le altre file restano dove le avevi lasciate); la prima volta sul
+    // banner, o sulle chiavette se Jellyfin non c'e'
+    // (passando dal riquadro del Mac alla vetrina, o viceversa, si riparte dall'alto: le righe sono altre)
+    if (vecchia && vecchia.mosso && scegli === 'tieni' && !!vecchia.disponi === vetrina) {
       pag.mosso = true;
-      var R0 = vecchia.righe[vecchia.r];
+      var R0 = vecchia.righe[vecchia.r], trovata = false;
       for (var i = 0; i < pag.righe.length; i++) {
-        if (R0 && pag.righe[i].chiave === R0.chiave) {
-          var R1 = pag.righe[i], v0 = R0.voci[R0.k], kk = v0 ? v0.getAttribute('data-chiave') : null;
-          pag.r = i;
-          R1.k = Math.min(R0.k, Math.max(0, R1.voci.length - 1));
-          for (var j0 = 0; j0 < R1.voci.length; j0++) if (kk && R1.voci[j0].getAttribute('data-chiave') === kk) R1.k = j0;
-        }
+        var R1 = pag.righe[i];
+        for (var iv = 0; iv < vecchia.righe.length; iv++) if (vecchia.righe[iv].chiave === R1.chiave && R1.crea) R1.k = Math.min(vecchia.righe[iv].k, Math.max(0, R1.n - 1));
+        if (!R0 || R1.chiave !== R0.chiave) continue;
+        var v0 = R0.voci[R0.k], kk = v0 ? v0.getAttribute('data-chiave') : null;
+        pag.r = i;
+        trovata = true;
+        R1.k = Math.min(R0.k, Math.max(0, quanteIn(R1) - 1));
+        if (!R1.crea) for (var j0 = 0; j0 < R1.voci.length; j0++) if (kk && R1.voci[j0].getAttribute('data-chiave') === kk) R1.k = j0;
       }
-    } else if (scegli === 'dischi') {
+      // la riga non c'e' piu' (la chiavetta tolta): si resta li' vicino, non si torna in cima
+      if (!trovata && pag.righe.length) {
+        pag.r = Math.min(vecchia.r, pag.righe.length - 1);
+        while (pag.r > 0 && !quanteIn(pag.righe[pag.r])) pag.r--;
+      }
+    } else if (scegli === 'dischi' || (!vetrina && dischi.length && !blocco)) {
       for (var j = 0; j < pag.righe.length; j++) if (pag.righe[j].chiave === 'dischi') pag.r = j;
     }
     evidenzia();
+    if (vetrina && !vetr.entrato) {
+      vetr.entrato = true;
+      sch.classList.add('entra');
+      setTimeout(function () { sch.classList.remove('entra'); }, 1500);
+    }
+    if (vetrina) vetrinaTimer();
   }
+  // un problema che ferma tutto (il permesso, il servizio del TV vecchio o che non risponde): grande al centro. Le chiavette
+  // che il TV non legge sono una riga piccola nel riquadro del Mac
   function disegnaVuoto(quantiContinua) {
-    var v = $('vuoto');
-    v.hidden = !!dischi.length;
-    if (dischi.length) return;
-    var errore = dischiErrore, t = 'Attacca una chiavetta o un disco USB', x = 'Appena il TV lo vede, i tuoi video compaiono qui.';
-    if (errore && errore.codice === 'permesso') { t = 'Il TV non lascia leggere le chiavette'; x = 'Il servizio di Home TV non ha il permesso di aprire le chiavette su questo TV. Si vede in "Questo TV".'; }
-    else if (errore && errore.codice === 'nonPrevisto') { t = 'Su questo TV le chiavette non si leggono ancora'; x = 'Arriveranno con un prossimo aggiornamento di Home TV.'; }
-    else if (errore && errore.codice === 'vecchio') { t = 'Su questo TV le chiavette non si leggono ancora'; x = 'Riavvia il TV: Home TV si aggiorna. Se resta così, su questo modello arriveranno con un prossimo aggiornamento.'; }
-    else if (errore && errore.codice === 'negato') { t = 'Apri Video dalla home di Home TV'; x = 'Le chiavette si leggono solo dentro Home TV, sul TV.'; }
-    else if (errore && (errore.codice === 'servizio' || errore.codice === 'lento')) { t = 'Il servizio del TV non risponde'; x = 'Riapri Home TV; se continua, riavvia il TV.'; }
+    var v = $('vuoto'), c = dischiErrore && dischiErrore.codice, t = '', x = '';
+    if (c === 'vecchio') { t = 'Su questo TV Real4K non si apre ancora'; x = 'Riavvia il TV: Home TV si aggiorna da sola. Se resta così, su questo modello arriverà con un prossimo aggiornamento.'; }
+    else if (c === 'negato') { t = 'Apri Real4K dalla home di Home TV'; x = 'I film del Mac e delle chiavette si vedono solo dentro Home TV, sul TV.'; }
+    else if ((c === 'servizio' || c === 'lento') && !jfAttivo()) { t = 'Il servizio del TV non risponde'; x = 'Riapri Home TV; se continua, riavvia il TV.'; }
+    v.hidden = !t;
+    if (!t) return false;
     $('vuoto-titolo').textContent = t;
     $('vuoto-testo').textContent = x;
-    // con Continua a guardare il messaggio sta sotto, piccolo (non sopra le carte); se non c'e' altro, grande al centro
     v.className = quantiContinua ? '' : 'solo';
+    return true;
   }
-  // una carta di Continua a guardare: la miniatura (o il fanart) del film, il titolo, quanto manca
+  function durataResta(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return 'meno di un minuto';
+    var m = Math.round(sec / 60);
+    return m >= 60 ? Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '') : m + ' min';
+  }
+  // una carta di Continua a guardare (chiavetta): l'immagine del film, il titolo sopra, quanto manca, la barra
   function cartaContinua(x, fila) {
-    var c = el('div', 'carta'), q = el('div', 'quadro'), t = titoloDi(x.nome), presente = !!trovaDisco(x.d);
+    var c = el('div', 'carta oriz'), q = el('div', 'quadro'), t = titoloDi(x.nome), presente = !!trovaDisco(x.d);
     c.setAttribute('data-chiave', 'punto:' + x.p);
     c.setAttribute('data-tv', '');
     if (!presente && dischi.length) c.className += ' manca';
@@ -619,50 +795,42 @@
     f.style.width = Math.min(100, Math.round(x.t / Math.max(1, x.dur) * 100)) + '%';
     b.appendChild(f);
     q.appendChild(b);
+    var sc = el('div', 'scritta'), nome = el('div', 'nome', etichetta(x.nome));
+    sc.appendChild(nome);
+    sc.appendChild(el('div', 'sotto', presente || !dischi.length ? 'Mancano ' + durataResta(x.dur - x.t) : 'Attacca la chiavetta di questo film'));
+    q.appendChild(sc);
     c.appendChild(q);
-    var nome = el('div', 'nome', etichetta(x.nome)), sotto = el('div', 'sotto', presente || !dischi.length ? 'Mancano ' + tempo(Math.max(0, x.dur - x.t)) : 'Attacca la chiavetta di questo film');
-    c.appendChild(nome);
-    c.appendChild(sotto);
     c.addEventListener('click', function () { riprendi(x, 'inizio'); });
+    c.info = function () {
+      return { sopra: t.episodio ? 'Puntata' : 'Film', titolo: t.titolo, prima: t.episodio ? 'S' + t.stagione + ' E' + t.episodio : '', meta: [t.anno ? String(t.anno) : '', nomeDisco(x.d)].filter(Boolean),
+        trama: presente || !dischi.length ? '' : 'Attacca la chiavetta di questo film per riprenderlo.',
+        dopo: presente ? function (cb) { chiediScheda(x.d, x.p, false, function (s) { if (s) cb(infoDaScheda(s, x.d)); }); } : null };
+    };
     fila.appendChild(c);
     if (presente) {
       chiediScheda(x.d, x.p, false, function (s) {
         if (!s || !c.parentNode) return;
         nome.textContent = s.tipo === 'puntata' && s.serie ? s.serie.titolo + ' · S' + s.stagione + ' E' + s.episodio : s.titolo + (s.anno ? ' (' + s.anno + ')' : '');
         var ref = s.img.landscape || s.img.fanart || s.img.poster;
-        if (ref) mettiImg(q, x.d, ref, 448, 252);
+        if (ref) mettiImg(q, x.d, ref, 448, 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
       });
     }
     return c;
   }
-  // il film grande in cima all'inizio: logo (o titolo), anno, durata, voto, trama, Riprendi
-  function mostraEroe(x) {
-    if (!x) return;
-    eroeDi = x;
-    var t = titoloDi(x.nome), logo = $('eroe-logo'), presente = !!trovaDisco(x.d) || !dischi.length;
-    svuota(logo);
-    logo.appendChild(el('h1', '', t.titolo));
-    $('eroe-meta').textContent = '';
-    $('eroe-trama').textContent = '';
-    var pp = $('eroe-pulsanti');
-    svuota(pp);
-    pp.appendChild(pulsante('Riprendi', 'play', function () { riprendi(x, 'inizio'); }, tempo(x.t) + ' di ' + tempo(x.dur)));
-    pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { var y = {}; for (var k in x) y[k] = x[k]; y.daCapo = true; riprendi(y, 'inizio'); }));
-    pp.appendChild(pulsante('Scheda', '', function () { apriScheda(x.d, x.p, { da: 'inizio', video: true }); }));
-    if (pag && pag.righe[0] && pag.righe[0].chiave === 'eroe') { pag.righe[0].voci = vociDi(pp); if (pag.r === 0) evidenzia(); }
-    if (!presente) { sfondo(null); return; }
-    chiediScheda(x.d, x.p, false, function (s) {
-      if (!s || eroeDi !== x) return;
-      var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
-      svuota(logo);
-      logo.appendChild(el('h1', '', titolo));
-      if (s.img.logo) mettiImg(logo, x.d, s.img.logo, 680, 260, true, function (si) { if (si && eroeDi === x) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
-      metaDi($('eroe-meta'), s, null, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '');
-      $('eroe-trama').textContent = s.trama || (s.serie && s.serie.trama) || '';
-      sfondo(x.d, s.img.fanart || s.img.landscape || s.img.poster, true);
-    });
+  // una carta piccola: icona, nome, stato (chiavette, Altro)
+  function cartaPiccola(chiave, ic, nome, stato, fn) {
+    var c = el('div', 'carta piccola'), q = el('div', 'quadro'), sc = el('div', 'scritta');
+    c.setAttribute('data-tv', '');
+    c.setAttribute('data-chiave', chiave);
+    q.appendChild(icona(ICONE[ic]));
+    sc.appendChild(el('div', 'nome', nome));
+    if (stato) sc.appendChild(el('div', 'stato', stato));
+    q.appendChild(sc);
+    c.appendChild(q);
+    c.addEventListener('click', fn);
+    return c;
   }
-  // la riga anno · durata · voto · classificazione
+  // la riga anno · durata · voto · classificazione · generi
   function metaDi(box, s, info, prima) {
     svuota(box);
     function pezzo(t, cl) { if (t) box.appendChild(el('span', cl || '', t)); }
@@ -671,8 +839,367 @@
     var min = s.durata || (info && info.durata ? info.durata / 60 : 0) || (s.secondi ? s.secondi / 60 : 0);
     if (min > 2) pezzo(durataBella(min));
     if (s.voto) pezzo('★ ' + String(s.voto).replace('.', ','), 'voto');
+    pezzo(s.generi && s.generi.length ? s.generi.slice(0, 3).join(', ') : '');
     pezzo(s.classificazione, 'cert');
-    if (s.generi && s.generi.length) pezzo(s.generi.slice(0, 3).join(', '));
+  }
+  // le informazioni della voce scelta, per il banner o in alto sopra le file: dalla scheda (Jellyfin o chiavetta)
+  function tipoNome(s) {
+    return s.tipo === 'serie' ? 'Serie' : s.tipo === 'puntata' ? 'Puntata' : s.tipo === 'collezione' ? 'Collezione' : s.tipo === 'stagione' ? 'Stagione' :
+      s.tipo === 'cartella' ? 'Cartella' : 'Film';
+  }
+  function infoDaScheda(s, d) {
+    var serie = s.tipo === 'puntata' && s.serie, fs = s.serie && s.serie.img ? s.serie.img : {};
+    return { s: s, d: d || '', sopra: tipoNome(s), titolo: serie ? s.serie.titolo : s.titolo,
+      prima: s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '',
+      logo: s.img.logo || fs.logo || null, trama: s.trama || (s.serie && s.serie.trama) || '',
+      sfondo: s.img.fanart || s.img.landscape || fs.fanart || s.img.poster || null, nitido: !!(s.img.fanart || s.img.landscape || fs.fanart) };
+  }
+  var eroeGiro = 0, eroeChiave = '';
+  function riempiEroe(x) {
+    var chiave = [x.s ? x.s.id || x.s.titolo : '', x.titolo, x.sopra, x.nuovo ? 1 : 0, x.prima, (x.meta || []).join('|'), x.trama ? x.trama.length : 0].join('\u0001');
+    if (chiave === eroeChiave) { if (x.sfondo) sfondo(x.d || '', x.sfondo, x.nitido !== false); else sfondo(null); return; }
+    eroeChiave = chiave;
+    var g = ++eroeGiro, logo = $('eroe-logo'), sopra = $('eroe-sopra'), meta = $('eroe-meta');
+    // le carte di servizio (Altro, chiavette, Tutti i film): il titolo piu' piccolo, non e' un film
+    if (x.s || x.nuovo) $('eroe').classList.remove('semplice'); else $('eroe').classList.add('semplice');
+    svuota(sopra);
+    if (x.nuovo) sopra.appendChild(el('b', '', 'Nuovo'));
+    if (x.sopra) sopra.appendChild(document.createTextNode(x.sopra));
+    svuota(logo);
+    logo.appendChild(el('h1', '', x.titolo || ''));
+    // il logo del titolo: quelli di Jellyfin dritti in un <img> (ridotti dal server), nelle file dopo una pausa di 220 ms;
+    // quelli delle chiavette dalla tela (se gia' pronti arrivano subito: niente titolo scritto che lampeggia)
+    if (x.logo && x.logo.jf && serv.gettone) {
+      var url0 = urlImmagine('', x.logo, 680, 260, true);
+      setTimeout(function () {
+        if (g !== eroeGiro) return;
+        var im0 = el('img');
+        im0.alt = x.titolo || '';
+        im0.onload = function () { if (g !== eroeGiro) return; svuota(logo); logo.appendChild(im0); im0.className = 'on'; };
+        im0.src = url0;
+      }, x.nuovo ? 0 : 220);
+    } else if (x.logo) {
+      piccola(x.d || '', x.logo, 680, 260, function (url) {
+        if (!url || g !== eroeGiro) return;
+        var im = el('img');
+        im.alt = x.titolo || '';
+        im.onload = function () { im.className = 'on'; };
+        im.src = url;
+        svuota(logo);
+        logo.appendChild(im);
+      }, true, function () { return g === eroeGiro; });
+    }
+    if (x.s) metaDi(meta, x.s, null, x.prima || '');
+    else { svuota(meta); if (x.prima) meta.appendChild(el('span', '', x.prima)); (x.meta || []).forEach(function (t) { meta.appendChild(el('span', '', t)); }); }
+    $('eroe-trama').textContent = x.trama || '';
+    if (x.sfondo) sfondo(x.d || '', x.sfondo, x.nitido !== false); else sfondo(null);
+  }
+  // in alto, sopra le file: la voce scelta (il suo titolo, l'anno, la trama, l'immagine)
+  function mostraInfo(e) {
+    if (!e) return;
+    var x = typeof e.info === 'function' ? e.info() : e.info;
+    riempiEroe(x || { titolo: '' });
+    if (x && x.dopo) x.dopo(function (y) { if (sceltaPagina() === e) riempiEroe(y); });
+  }
+
+  /* ---------------------------------------------------------- il banner: i film arrivati da poco, che cambiano da soli */
+
+  var vetr = { slide: [], k: 0, timer: null, dissolvi: null, entrato: false, giri: 0 };
+  // i film nuovi con un'immagine grande (il banner senza immagine e' brutto); se sono pochi, anche le serie
+  function slideDi(d) {
+    function conSfondo(it) { return !!JF.scheda(it).img.fanart; }
+    var l = d.nuovi.filter(function (it) { return it.Type === 'Movie' && conSfondo(it); });
+    if (l.length < 3) l = l.concat(d.nuovi.filter(function (it) { return it.Type !== 'Movie' && conSfondo(it); }));
+    if (!l.length) l = d.nuovi.slice(0, 1);
+    return l.slice(0, 6);
+  }
+  function infoSlide(it) { var x = infoDaScheda(JF.scheda(it), ''); x.nuovo = true; return x; }
+  function mostraSlide(k) {
+    var it = vetr.slide[k];
+    if (!it) return;
+    vetr.k = k;
+    riempiEroe(infoSlide(it));
+    var s = JF.scheda(it), pp = $('eroe-pulsanti'), ripr = riprendibileJf(s), film = s.tipo !== 'serie';
+    svuota(pp);
+    pp.appendChild(pulsante(film ? ripr ? 'Riprendi' : 'Guarda' : 'Episodi', 'play', function () {
+      if (film) guardaJf(it, { ritorno: tornaInizio, t: ripr ? s.punto : 0 }); else apriJf(it, { indietro: tornaInizio });
+    }, ripr ? 'da ' + tempo(s.punto) : ''));
+    pp.appendChild(pulsante('Dettagli', 'info', function () { apriJf(it, { indietro: tornaInizio }); }));
+    var punti0 = $('eroe-punti');
+    svuota(punti0);
+    if (vetr.slide.length > 1) for (var i = 0; i < vetr.slide.length; i++) punti0.appendChild(el('i', i === k ? 'on' : ''));
+    for (var r = 0; pag && r < pag.righe.length; r++) {
+      if (pag.righe[r].chiave === 'eroe') { pag.righe[r].voci = vociDi(pp); pag.righe[r].k = Math.min(pag.righe[r].k, pp.children.length - 1); }
+    }
+  }
+  // il film dopo (o prima): il testo sparisce piano, cambia, ritorna; l'immagine passa sopra la vecchia
+  function cambiaSlide(dir, daSolo) {
+    if (vetr.slide.length < 2) return;
+    var k = (vetr.k + dir + vetr.slide.length) % vetr.slide.length, d0 = $('eroe-dentro');
+    d0.classList.add('via');
+    clearTimeout(vetr.dissolvi);
+    vetr.dissolvi = setTimeout(function () {
+      mostraSlide(k);
+      d0.classList.remove('via');
+      if (schermo === 'inizio' && pag && pag.righe[pag.r] && pag.righe[pag.r].chiave === 'eroe') evidenzia();
+    }, 230);
+    vetrinaTimer(daSolo);
+  }
+  // ogni 9 secondi senza tasti, se si e' sul banner; dopo un giro di tutti i film si ferma (riparte al primo tasto)
+  function vetrinaTimer(daSolo) {
+    clearTimeout(vetr.timer);
+    if (!daSolo) vetr.giri = 0;
+    if (vetr.slide.length < 2 || vetr.giri >= vetr.slide.length) return;
+    vetr.timer = setTimeout(function () {
+      if (schermo !== 'inizio') return;
+      if (fermoAperto() || bin.aperto || !pag || !pag.righe[pag.r] || pag.righe[pag.r].chiave !== 'eroe') { vetrinaTimer(true); return; }
+      vetr.giri++;
+      cambiaSlide(1, true);
+    }, 9000);
+  }
+  function fermaVetrina() { clearTimeout(vetr.timer); clearTimeout(vetr.dissolvi); var d0 = $('eroe-dentro'); if (d0) d0.classList.remove('via'); }
+  // la vetrina col telecomando: sul banner il film grande e la prima fila che si affaccia in basso; nelle file la fila scelta a
+  // meta' schermo, quelle sopra spariscono, in alto le informazioni della voce scelta (l'immagine piu' piccola, in alto a destra)
+  function disponiVetrina(R, e) {
+    var sch = $('schermo-inizio'), H = window.innerHeight, eroe = R.chiave === 'eroe', prima = null, y, r;
+    for (r = 0; r < pag.righe.length; r++) if (pag.righe[r].chiave !== 'eroe') { prima = pag.righe[r]; break; }
+    y = eroe ? H * 0.86 - (prima ? altezzaIn(prima.sezione, pag.corpo) : 0) : H * 0.5 - altezzaIn(R.sezione, pag.corpo);
+    pag.corpo.style.transform = 'translateY(' + Math.round(y) + 'px)';
+    if (eroe) sch.classList.remove('righe'); else sch.classList.add('righe');
+    modoSfondo(eroe ? 'eroe' : 'righe');
+    for (r = 0; r < pag.righe.length; r++) {
+      var s = pag.righe[r].sezione;
+      if (!s || s === $('eroe')) continue;
+      if (!eroe && r < pag.r) s.classList.add('sopra'); else s.classList.remove('sopra');
+    }
+    if (eroe) riempiEroe(infoSlide(vetr.slide[vetr.k]));
+    else mostraInfo(e);
+  }
+
+  /* ---------------------------------------------------------- il binario a sinistra: Home, Cerca, La mia lista, Film... */
+
+  var bin = { aperto: false, k: 0, voci: [] };
+  function disegnaBinario() {
+    var box = $('binario-voci'), d = jfAttivo() ? jf.dati : null, l = [];
+    svuota(box);
+    l.push({ id: 'casa', ic: 'casa', nome: 'Home', fn: function () { chiudiBinario(true); vaiRiga(0); } });
+    if (jfAttivo()) l.push({ id: 'cerca', ic: 'cerca', nome: 'Cerca', fn: function () { apriCerca(tornaInizio); } });
+    if (d && d.preferiti.length) l.push({ id: 'lista', ic: 'lista', nome: 'La mia lista', fn: function () {
+      apriLibreriaJf({ titolo: 'La mia lista', query: { Filters: 'IsFavorite', IncludeItemTypes: 'Movie,Series', Recursive: true }, indietro: tornaInizio });
+    } });
+    if (d && d.film && d.film.tot) l.push({ id: 'film', ic: 'film', nome: 'Film', fn: function () { apriTuttiJf('Movie'); } });
+    if (d && d.serie && d.serie.tot) l.push({ id: 'serie', ic: 'serie', nome: 'Serie', fn: function () { apriTuttiJf('Series'); } });
+    if (dischi.length) l.push({ id: 'chiavette', ic: 'chiavetta', nome: 'Chiavette USB', fn: function () {
+      if (dischi.length === 1) apriLibreria(dischi[0].id, ''); else { chiudiBinario(true); vaiRiga('dischi'); }
+    } });
+    l.push({ id: 'altro', ic: 'impostazioni', nome: 'Altro', fn: function () { chiudiBinario(true); vaiRiga('altro'); } });
+    var idScelto = bin.voci[bin.k] ? bin.voci[bin.k].id : '';
+    bin.voci = l;
+    for (var b0 = 0; b0 < l.length; b0++) if (l[b0].id === idScelto) bin.k = b0;
+    if (bin.k >= l.length) bin.k = l.length - 1;
+    l.forEach(function (x, i) {
+      var e = el('div', 'bv' + (x.id === 'casa' ? ' qui' : '') + (bin.aperto && i === bin.k ? ' sel' : ''));
+      e.setAttribute('data-chiave', 'binario:' + x.id);
+      e.appendChild(icona(ICONE[x.ic]));
+      e.appendChild(el('span', '', x.nome));
+      e.addEventListener('click', function () { bin.k = i; x.fn(); });
+      box.appendChild(e);
+    });
+  }
+  function segnaBinario() {
+    var l = $('binario-voci').children;
+    for (var i = 0; i < l.length; i++) { if (i === bin.k && bin.aperto) l[i].classList.add('sel'); else l[i].classList.remove('sel'); }
+  }
+  function apriBinario() {
+    bin.aperto = true;
+    bin.k = 0;
+    $('binario').className = 'aperto';
+    $('schermo-inizio').classList.add('binario');
+    segnaBinario();
+  }
+  function chiudiBinario(senzaScelta) {
+    if (!bin.aperto) return;
+    bin.aperto = false;
+    $('binario').className = '';
+    $('schermo-inizio').classList.remove('binario');
+    segnaBinario();
+    if (!senzaScelta && schermo === 'inizio') evidenzia();
+  }
+  function tastoBinario(a) {
+    if (a === 'up' && bin.k > 0) { bin.k--; segnaBinario(); }
+    else if (a === 'down' && bin.k < bin.voci.length - 1) { bin.k++; segnaBinario(); }
+    else if (a === 'right') chiudiBinario();
+    else if (a === 'ok') { var e = $('binario-voci').children[bin.k]; if (e) e.click(); }
+    return true;
+  }
+  // una riga per chiave (o per numero): la scelta ci va, sulla prima voce
+  function vaiRiga(chiave) {
+    if (!pag) return false;
+    for (var r = 0; r < pag.righe.length; r++) {
+      if (chiave === r || pag.righe[r].chiave === chiave) { if (!quanteIn(pag.righe[r])) continue; pag.r = r; pag.righe[r].k = 0; pag.mosso = true; evidenzia(); return true; }
+    }
+    return false;
+  }
+  // Film o Serie, tutti in griglia (con ordine e filtri): la libreria di Jellyfin, se e' una sola
+  function apriTuttiJf(tipo) {
+    var film = tipo === 'Movie', viste = (jf.dati && jf.dati.viste || []).filter(function (v) { return v.CollectionType === (film ? 'movies' : 'tvshows'); });
+    if (viste.length === 1) apriLibreriaJf({ titolo: film ? 'Film' : 'Serie', vista: viste[0], indietro: tornaInizio });
+    else apriLibreriaJf({ titolo: film ? 'Film' : 'Serie', query: { IncludeItemTypes: tipo, Recursive: true }, indietro: tornaInizio });
+  }
+
+  /* ---------------------------------------------------------- senza Jellyfin: "Guarda i film del tuo Mac", col codice
+   * Si cerca il Mac nella rete di casa (Jellyfin risponde al broadcast); trovato, un pulsante lo collega (mai da soli: nelle prove
+   * sul Mac risponderebbe il Jellyfin vero); poi il codice di 6 cifre, da scrivere sul Mac in Home TV Film › Collega il TV (o da
+   * confermare con Quick Connect di Jellyfin). Quando il Mac lo conferma, l'inizio si riempie da solo. */
+
+  var benv = { fase: '', giro: 0, timer: null, codice: '', codiceDa: 0, server: [], attivo: false };
+  function disegnaBenvenuto(si) {
+    $('benvenuto').hidden = !si;
+    if (!si) { benvFerma(); return; }
+    if (!benv.attivo) benvAvvia(); else benvDisegna();
+  }
+  function benvAvvia() {
+    benv.attivo = true;
+    var st = jf.stato || {};
+    if (st.errore && !st.server) { benv.giro++; benv.fase = st.errore === 'assente' || st.errore === 'vecchio' ? 'vecchio' : 'errore'; benvDisegna(); }
+    // il codice di prima vale ancora (il servizio lo tiene 10 minuti): non se ne fa uno nuovo, se no chi l'ha gia' scritto sul
+    // Mac non collega piu' il TV
+    else if (st.server && benv.codice && Date.now() - benv.codiceDa < 540000) benvAspetta(++benv.giro);
+    else if (st.server) benvCodice();
+    else benvCerca();
+  }
+  function benvFerma() { benv.giro++; benv.attivo = false; clearTimeout(benv.timer); }
+  function benvDopo(fn, ms) {
+    var giro = benv.giro;
+    clearTimeout(benv.timer);
+    benv.timer = setTimeout(function () { if (giro === benv.giro && schermo === 'inizio' && benv.attivo) fn(); }, ms);
+  }
+  function benvCerca() {
+    var giro = ++benv.giro;
+    clearTimeout(benv.timer);
+    benv.fase = 'cerca';
+    benv.server = [];
+    benvDisegna();
+    chiedi('jf/cerca').then(function (r) {
+      if (giro !== benv.giro) return;
+      benv.server = (r.server || []).slice(0, 3);
+      benv.fase = benv.server.length ? 'scegli' : 'nessuno';
+      benvDisegna();
+      if (!benv.server.length) benvDopo(benvCerca, 20000);
+    }, function (e) {
+      if (giro !== benv.giro) return;
+      benv.fase = e.codice === 'assente' || e.codice === 'vecchio' ? 'vecchio' : 'nessuno';
+      benvDisegna();
+      if (benv.fase === 'nessuno') benvDopo(benvCerca, 20000);
+    });
+  }
+  function benvScegli(indirizzo) {
+    var giro = ++benv.giro;
+    clearTimeout(benv.timer);
+    benv.fase = 'collego';
+    benv.dove = indirizzo;
+    benvDisegna();
+    chiedi('jf/server', null, { indirizzo: indirizzo }).then(function (r) {
+      if (giro !== benv.giro) return;
+      jf.stato = r;
+      benvCodice();
+    }, function (e) {
+      if (giro !== benv.giro) return;
+      messaggio(erroreServer(e, indirizzo), 5000);
+      benv.fase = benv.server.length ? 'scegli' : 'nessuno';
+      benvDisegna();
+    });
+  }
+  function benvCodice() {
+    var giro = ++benv.giro;
+    clearTimeout(benv.timer);
+    benv.fase = 'prepara';
+    benvDisegna();
+    chiedi('jf/qc', null, {}).then(function (r) {
+      if (giro !== benv.giro) return;
+      benv.codice = String(r.codice || '');
+      benv.codiceDa = Date.now();
+      benvAspetta(giro);
+    }, function (e) {
+      if (giro !== benv.giro) return;
+      benv.fase = e.codice === 'quickconnect' ? 'qcspento' : 'giu';
+      benvDisegna();
+      if (benv.fase === 'giu') benvDopo(benvCodice, 20000);
+    });
+  }
+  // il codice e' sul TV: si aspetta che il Mac (o il telefono) lo confermi
+  function benvAspetta(giro) {
+    clearTimeout(benv.timer);
+    benv.fase = 'codice';
+    benvDisegna();
+    (function controlla() {
+      benvDopo(function () {
+        chiedi('jf/qc').then(function (s) {
+          if (giro !== benv.giro || schermo !== 'inizio') return;
+          if (s.stato === 'fatto') { benv.codice = ''; benvFerma(); collegato(); return; }
+          // scaduto, o il servizio non lo conosce piu' (e' ripartito): un codice nuovo
+          if (s.stato === 'scaduto' || s.stato === 'nessuno') { benv.codice = ''; benvCodice(); return; }
+          controlla();
+        }, function () { if (giro === benv.giro) controlla(); });
+      }, 2500);
+    })();
+  }
+  // un codice di 6 cifre in caselle (a gruppi di tre)
+  function cifreIn(box, codice) {
+    svuota(box);
+    for (var i = 0; i < codice.length; i++) box.appendChild(el('span', 'cifra' + (i === 2 && codice.length === 6 ? ' meta3' : ''), codice.charAt(i)));
+  }
+  function benvIndirizzo() {
+    HomeTV.chiediTesto({ titolo: 'Indirizzo del Mac (es. 192.168.1.20:8096)', valore: '' }).then(function (t) { if (t) benvScegli(t); });
+  }
+  function benvDisegna() {
+    var nome = jf.stato && jf.stato.server ? jf.stato.server.nome || 'Jellyfin' : 'Jellyfin', t = '', stato = '', nota = '', p = [];
+    var cerca = { testo: 'Cerca di nuovo', ic: 'cerca', fn: benvCerca }, scrivi = { testo: 'Scrivi l\'indirizzo', fn: benvIndirizzo };
+    var altro = { testo: 'Un altro Mac', fn: benvCerca }, pw = { testo: 'Nome e password', fn: function () { collegaPassword(benvAvvia); } };
+    if (benv.fase === 'cerca') { t = 'Cerco il Mac nella rete di casa…'; stato = 'Cerco…'; p = [scrivi]; }
+    else if (benv.fase === 'scegli') {
+      t = benv.server.length === 1 ? 'Ho trovato il tuo Mac. Collegalo: poi sul Mac scrivi il codice che compare qui.' : 'Ho trovato più Mac: scegli il tuo.';
+      p = benv.server.map(function (s) { return { testo: 'Collega ' + (s.nome || 'Jellyfin'), ic: 'mac', fn: function () { benvScegli(s.indirizzo); } }; }).concat([scrivi]);
+    } else if (benv.fase === 'nessuno') {
+      t = 'Non trovo il Mac nella rete di casa. Accendilo e apri Home TV Film: il TV e il Mac devono stare sulla stessa Wi-Fi.';
+      stato = 'Riprovo da solo';
+      p = [cerca, scrivi];
+    } else if (benv.fase === 'collego') { t = 'Mi collego a ' + String(benv.dove || '').replace(/^https?:\/\//, '') + '…'; }
+    else if (benv.fase === 'prepara') { t = 'Preparo il codice…'; p = [altro]; }
+    else if (benv.fase === 'codice') {
+      t = 'Sul Mac apri Home TV Film, scegli «Collega il TV» e scrivi questo codice.';
+      stato = 'Aspetto il Mac · ' + nome;
+      nota = 'Usi Jellyfin? Il tuo profilo › Quick Connect, stesso codice.';
+      p = [pw, altro];
+    } else if (benv.fase === 'giu') { t = nome + ' non risponde: il Mac è acceso, con Home TV Film aperta?'; stato = 'Riprovo da solo'; p = [{ testo: 'Riprova', ic: 'ripeti', fn: benvCodice }, altro]; }
+    else if (benv.fase === 'qcspento') { t = 'Su questo Mac il collegamento col codice è spento: entra con nome e password.'; p = [pw, altro]; }
+    else if (benv.fase === 'vecchio') { t = 'Il servizio di questo TV non sa ancora parlare col Mac: riavvia il TV per aggiornare Home TV.'; p = [{ testo: 'Riprova', ic: 'ripeti', fn: function () { jfCaricaStato(function () { benvFerma(); disegnaInizio('tieni'); }); } }]; }
+    else if (benv.fase === 'errore') { t = 'Non riesco a parlare col servizio del TV: riprova tra poco.'; p = [{ testo: 'Riprova', ic: 'ripeti', fn: function () { jfCaricaStato(function () { benvFerma(); disegnaInizio('tieni'); }); } }]; }
+    else t = 'Un attimo…';
+    $('benv-testo').textContent = t;
+    var cod = $('benv-codice');
+    svuota(cod);
+    cod.hidden = benv.fase !== 'codice';
+    if (benv.fase === 'codice') cifreIn(cod, benv.codice);
+    var st = $('benv-stato');
+    svuota(st);
+    if (stato) { st.appendChild(el('i')); st.appendChild(document.createTextNode(stato)); }
+    // le chiavette: se non ce ne sono, una riga per dire che si puo'
+    var c = dischiErrore && dischiErrore.codice;
+    if (!nota && !dischi.length) nota = c === 'permesso' ? 'Le chiavette: il TV non lascia leggerle (si vede in «Questo TV»).' : c === 'nonPrevisto' ? 'Su questo TV le chiavette non si leggono ancora.' :
+      'Hai un film su una chiavetta? Attaccala al TV: compare qui sotto.';
+    $('benv-nota').textContent = nota;
+    var pp = $('benv-pulsanti'), scelto = pp.querySelector('.sel'), testoScelto = scelto ? scelto.textContent : '';
+    svuota(pp);
+    p.forEach(function (x) { pp.appendChild(pulsante(x.testo, x.ic || '', x.fn)); });
+    // la riga del telecomando: i pulsanti nuovi
+    for (var r = 0; !disegnando && pag && pag.corpo === $('inizio-corpo') && r < pag.righe.length; r++) {
+      if (pag.righe[r].chiave !== 'benvenuto') continue;
+      pag.righe[r].voci = vociDi(pp);
+      pag.righe[r].k = Math.min(pag.righe[r].k, Math.max(0, pp.children.length - 1));
+      for (var q = 0; testoScelto && q < pp.children.length; q++) if (pp.children[q].textContent === testoScelto) pag.righe[r].k = q;
+      if (pag.r === r && schermo === 'inizio') evidenzia();
+    }
   }
   // un film di Continua a guardare: sulla stessa chiavetta, oppure su un'altra attaccata (la lettera puo' cambiare)
   function riprendi(x, ritorno) {
@@ -734,166 +1261,286 @@
     return [s.anno ? String(s.anno) : '', s.durata > 2 ? durataBella(s.durata) : ''].filter(Boolean).join(' · ') || 'Film';
   }
 
-  // le file dell'inizio, tutte insieme (una domanda per fila, al massimo ogni minuto); si ridisegna quando arrivano
+  // le file dell'inizio, tutte insieme (al massimo ogni minuto); si ridisegna quando arrivano. Le collezioni: ognuna coi suoi
+  // film (servono per le file e per "Altri della collezione" nella scheda); Film e Serie: la prima pagina, le altre quando la
+  // fila ci arriva
   function jfCaricaInizio(forza) {
     if (!jfAttivo()) { jf.dati = null; return; }
     if (!forza && jf.dati && Date.now() - jf.caricato < 60000) return;
-    var giro = ++jf.giro, u = uid(), d = { riprendi: [], prossimi: [], viste: [], aggiunti: [], generi: [], collezioni: [], preferiti: [] };
+    if (!forza && jf.inCorso && Date.now() - jf.inCorso < 30000) return;
+    var giro = ++jf.giro, u = uid(), d = { riprendi: [], prossimi: [], viste: [], nuovi: [], collezioni: [], preferiti: [], film: null, serie: null };
+    // le collezioni (una domanda per collezione) e le file Film e Serie cambiano di rado: si tengono 10 minuti
+    var lenti = forza !== 'tutto' && jf.lenti && jf.lenti.utente === u && Date.now() - jf.lenti.quando < 600000 ? jf.lenti : null, arrivati = 0;
     jf.caricato = Date.now();
+    jf.inCorso = Date.now();
     function no(e) { return e; }
     Promise.all([
       chiediJf('UserItems/Resume', conCampi({ Limit: 12, MediaTypes: 'Video' })).then(function (r) { d.riprendi = voci(r); }, no),
-      chiediJf('Shows/NextUp', conCampi({ UserId: u, Limit: 16, EnableResumable: false })).then(function (r) { d.prossimi = voci(r); }, no),
+      chiediJf('Shows/NextUp', conCampi({ UserId: u, Limit: 12, EnableResumable: false })).then(function (r) { d.prossimi = voci(r); }, no),
       chiediJf('UserViews', { userId: u }).then(function (r) {
         d.viste = voci(r).filter(function (x) { return /^(movies|tvshows|homevideos|boxsets|mixed)$/.test(x.CollectionType || 'mixed'); });
-        var film = d.viste.filter(function (x) { return x.CollectionType === 'movies'; })[0];
-        var dopo = d.viste.filter(function (x) { return x.CollectionType !== 'boxsets'; }).slice(0, 4).map(function (vista) {
-          return chiediJf('Items/Latest', conCampi({ ParentId: vista.Id, Limit: 16, GroupItems: true })).then(function (r2) {
-            if (voci(r2).length) d.aggiunti.push({ vista: vista, voci: voci(r2) });
-          }, no);
-        });
-        if (film) dopo.push(chiediJf('Genres', { ParentId: film.Id, UserId: u, SortBy: 'SortName', Limit: 30 }).then(function (r3) {
-          d.generi = voci(r3).map(function (g) { return { nome: String(g.Name || ''), vista: film.Id }; }).filter(function (g) { return g.nome; });
-        }, no));
-        return Promise.all(dopo);
+        return Promise.all(d.viste.filter(function (x) { return x.CollectionType !== 'boxsets'; }).slice(0, 4).map(function (vista) {
+          return chiediJf('Items/Latest', conCampi({ ParentId: vista.Id, Limit: 16, GroupItems: true })).then(function (r2) { d.nuovi = d.nuovi.concat(voci(r2)); }, no);
+        }));
       }, no),
-      chiediJf('Items', conCampi({ IncludeItemTypes: 'BoxSet', Recursive: true, SortBy: 'SortName', Limit: 20 })).then(function (r) { d.collezioni = voci(r); }, no),
-      chiediJf('Items', conCampi({ Filters: 'IsFavorite', IncludeItemTypes: 'Movie,Series,Episode', Recursive: true, SortBy: 'DatePlayed,SortName',
-        SortOrder: 'Descending', Limit: 20 })).then(function (r) { d.preferiti = voci(r); }, no)
+      chiediJf('Items', conCampi({ Filters: 'IsFavorite', IncludeItemTypes: 'Movie,Series', Recursive: true, SortBy: 'DatePlayed,SortName',
+        SortOrder: 'Descending', Limit: 30 })).then(function (r) { d.preferiti = voci(r); }, no),
+      lenti ? Promise.resolve(d.film = lenti.film) : elencoJf('Movie').then(function (x) { d.film = x; arrivati++; }, no),
+      lenti ? Promise.resolve(d.serie = lenti.serie) : elencoJf('Series').then(function (x) { d.serie = x; arrivati++; }, no)
     ]).then(function (r) {
       if (giro !== jf.giro) return;
-      d.aggiunti.sort(function (a, b) { return d.viste.indexOf(a.vista) - d.viste.indexOf(b.vista); });
+      jf.inCorso = 0;
+      // i nuovi di tutte le librerie insieme, i piu' recenti prima
+      d.nuovi.sort(function (a, b) { return (Date.parse(b.DateCreated || '') || 0) - (Date.parse(a.DateCreated || '') || 0); });
+      d.nuovi = d.nuovi.slice(0, 20);
       var rete = r.filter(function (x) { return x && (x.codice === 'rete' || x.codice === 'servizio' || x.codice === 'lento'); }).length;
       jf.errore = rete >= 3 ? 'rete' : '';
       if (r.some(function (x) { return x && x.codice === 'accesso'; })) { jf.dati = null; if (jf.stato) jf.stato.utente = null; }
       else if (jf.errore) { jf.dati = null; jf.caricato = 0; }
-      else jf.dati = d;
-      if (schermo === 'inizio') disegnaInizio('tieni');
+      else {
+        d.utente = u;
+        // le collezioni: quelle tenute (10 minuti), o intanto quelle di prima (niente file che spariscono e ritornano)
+        d.collezioni = lenti ? lenti.collezioni : jf.dati && jf.dati.utente === u ? jf.dati.collezioni : [];
+        jf.dati = d;
+      }
+      ridisegnaJf();
       // il Mac spento: si riprova da soli ogni 30 secondi finche' si sta all'inizio
       clearTimeout(jf.riprova);
       if (jf.errore) jf.riprova = setTimeout(function () { if (schermo === 'inizio' && jfAttivo()) jfCaricaInizio(true); }, 30000);
+      if (lenti || jf.dati !== d) return;
+      // poi le collezioni (una domanda per collezione): arrivano dopo, l'inizio non le aspetta
+      var dc = { collezioni: [] };
+      caricaCollezioni(dc).then(function (tutte) {
+        if (giro !== jf.giro || jf.dati !== d) return;
+        d.collezioni = dc.collezioni;
+        // (si tengono 10 minuti solo se e' arrivato tutto: una fila vuota per un errore non resta)
+        if (tutte && arrivati === 2) jf.lenti = { quando: Date.now(), utente: u, collezioni: d.collezioni, film: d.film, serie: d.serie };
+        ridisegnaJf();
+      }, function () {});
     });
   }
-  // Continua a guardare: le chiavette (la memoria dell'app) e Jellyfin (il punto lo tiene il server), i piu' recenti prima
-  function continuaTutti() {
-    var l = continua().map(function (x) { return { x: x, quando: x.quando }; });
-    if (jf.dati) jf.dati.riprendi.forEach(function (it) { var s = JF.scheda(it); l.push({ jf: it, s: s, quando: s.ultimaVolta }); });
-    return l.sort(function (a, b) { return b.quando - a.quando; }).slice(0, 16);
+  // l'inizio si ridisegna solo se le file di Jellyfin sono cambiate davvero (tornando da un film si ricaricano: se sono uguali
+  // niente lavoro per il TV)
+  function firmaJf() {
+    var d = jf.dati;
+    if (!d) return 'niente|' + jf.errore;
+    function ids(l) { return (l || []).map(function (it) { var x = it.UserData || {}; return it.Id + (x.Played ? 'v' : '') + Math.round(x.PlayedPercentage || 0) + (x.IsFavorite ? 'f' : ''); }).join(','); }
+    return [ids(d.riprendi), ids(d.prossimi), ids(d.nuovi), ids(d.preferiti), d.collezioni.map(function (c) { return c.it.Id + ':' + ids(c.voci); }).join(';'),
+      d.film ? d.film.tot : 0, d.serie ? d.serie.tot : 0, jf.errore].join('|');
   }
-  // una carta di Jellyfin: poster (2:3) o orizzontale (16:9); l'immagine quando la fila si avvicina (vedi caricaVicine)
+  function ridisegnaJf() {
+    var f = firmaJf();
+    if (f === jf.firma && schermo === 'inizio' && pag && pag.corpo === $('inizio-corpo')) return;
+    jf.firma = f;
+    if (schermo === 'inizio') disegnaInizio('tieni');
+  }
+  // le collezioni (BoxSet): quelle di TheMovieDb e quelle che fa l'app del Mac. L'ordine lo decide il Mac col nome per ordinare
+  // ("01 MCU", "02 ..."): prima quelle col numero, poi le altre per nome (JF.ordinaCollezioni). Al massimo 40, quattro domande
+  // alla volta
+  function caricaCollezioni(d) {
+    return chiediJf('Items', conCampi({ IncludeItemTypes: 'BoxSet', Recursive: true, SortBy: 'SortName', Limit: 100, Fields: JF.CAMPI + ',SortName,Tags,ProviderIds' })).then(function (r) {
+      var l = JF.ordinaCollezioni(voci(r)).filter(function (it) { return !(it.ChildCount >= 0) || it.ChildCount >= 2; }).slice(0, 40), k = 0, mancate = 0;
+      d.collezioni = l.map(function (it) { return { it: it, voci: [] }; });
+      function prossima() {
+        var c = d.collezioni[k++];
+        if (!c) return Promise.resolve();
+        // (con l'utente e Recursive, come dice il contratto con l'app del Mac: senza, Jellyfin ne da' 0)
+        return chiediJf('Items', conCampi({ ParentId: c.it.Id, IncludeItemTypes: 'Movie,Series', Recursive: true, SortBy: 'PremiereDate,ProductionYear,SortName',
+          SortOrder: 'Ascending', Limit: 60 })).then(function (r2) { c.voci = voci(r2).filter(function (it) { return it.Type !== 'BoxSet'; }); }, function () { mancate++; }).then(prossima);
+      }
+      return Promise.all([prossima(), prossima(), prossima(), prossima()]).then(function () { return !mancate; });
+    });
+  }
+  // dopo una visione, un "Visto" o "La mia lista": la voce si aggiorna anche nelle file tenute 10 minuti (una domanda sola)
+  function aggiornaVoceLenti(id) {
+    var l = jf.lenti;
+    if (!l || !id) return;
+    chiediJf('Items/' + id, { userId: uid() }).then(function (it) {
+      if (jf.lenti !== l || !it || !it.Id) return;
+      function cambia(lista) { for (var i = 0; lista && i < lista.length; i++) if (lista[i] && lista[i].Id === it.Id) lista[i] = it; }
+      l.collezioni.forEach(function (c) { cambia(c.voci); });
+      if (l.film) cambia(l.film.voci);
+      if (l.serie) cambia(l.serie.voci);
+    }, function () {});
+  }
+  // le collezioni (gia' caricate) che contengono questo film
+  function collezioniDi(id) {
+    var out = [];
+    (jf.dati ? jf.dati.collezioni : []).forEach(function (c) { for (var i = 0; i < c.voci.length; i++) if (c.voci[i].Id === id) { out.push(c); return; } });
+    return out;
+  }
+  // una fila lunga (Film, Serie): tutti i titoli per nome, a pagine di 40
+  var PAGINA = 40;
+  function elencoJf(tipo) {
+    var x = { tipo: tipo, tot: 0, voci: [], pagine: {} };
+    return paginaElenco(x, 0).then(function () { return x; });
+  }
+  function paginaElenco(x, k) {
+    x.pagine[k] = 'in volo';
+    return chiediJf('Items', conCampi({ IncludeItemTypes: x.tipo, Recursive: true, SortBy: 'SortName', SortOrder: 'Ascending', StartIndex: k * PAGINA, Limit: PAGINA })).then(function (r) {
+      var l = voci(r);
+      x.tot = typeof r.TotalRecordCount === 'number' ? r.TotalRecordCount : Math.max(x.tot, k * PAGINA + l.length);
+      for (var i = 0; i < l.length; i++) x.voci[k * PAGINA + i] = l[i];
+      x.pagine[k] = true;
+    }, function (e) { x.pagine[k] = false; throw e; });
+  }
+  function caricaPaginaFila(x, k, chiave) {
+    if (x.pagine[k]) return;
+    var giro = jf.giro;
+    paginaElenco(x, k).then(function () {
+      if (giro !== jf.giro || schermo !== 'inizio' || !pag) return;
+      for (var r = 0; r < pag.righe.length; r++) if (pag.righe[r].chiave === chiave) { svuotaRiga(pag.righe[r]); evidenzia(); }
+    }, function () {});
+  }
+  // Continua a guardare: le chiavette (la memoria dell'app) e Jellyfin (il punto lo tiene il server), i piu' recenti prima;
+  // poi i prossimi episodi delle serie iniziate
+  function continuaTutti() {
+    var l = continua().map(function (x) { return { x: x, quando: x.quando }; }), serie = {};
+    if (jf.dati) jf.dati.riprendi.forEach(function (it) { var s = JF.scheda(it); if (it.SeriesId) serie[it.SeriesId] = 1; l.push({ jf: it, s: s, quando: s.ultimaVolta }); });
+    l.sort(function (a, b) { return b.quando - a.quando; });
+    if (jf.dati) jf.dati.prossimi.forEach(function (it) {
+      if (it.SeriesId && serie[it.SeriesId]) return;
+      if (it.SeriesId) serie[it.SeriesId] = 1;
+      l.push({ jf: it, s: JF.scheda(it), quando: 0, prossimo: true });
+    });
+    return l.slice(0, 16);
+  }
+  // una carta di Jellyfin: poster (2:3) o orizzontale (16:9, il titolo sopra l'immagine); l'immagine quando la fila si
+  // avvicina (vedi caricaVicine). Nelle file lunghe la mette nella pagina la fila (fila null)
   function cartaJf(it, forma, fila, opz) {
     opz = opz || {};
-    var s = JF.scheda(it), poster = forma === 'poster', c = el('div', 'carta' + (poster ? ' poster' : '')), q = el('div', 'quadro');
+    var s = JF.scheda(it), poster = forma === 'poster', c = el('div', 'carta' + (poster ? ' poster' : ' oriz')), q = el('div', 'quadro');
     var titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
     c.setAttribute('data-chiave', 'jf:' + it.Id);
     c.setAttribute('data-tv', '');
-    q.appendChild(finta(titolo, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio : s.anno || '', s.tipo === 'puntata' || s.tipo === 'serie' ? 'serie' : 'film'));
+    q.appendChild(finta(titolo, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio : s.anno || '', s.tipo === 'puntata' || s.tipo === 'serie' ? 'serie' : s.tipo === 'collezione' ? 'cartella' : 'film'));
     if (s.visto && s.tipo !== 'serie') { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); q.appendChild(vs); }
     else if (s.percento > 0 && s.percento < 100) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.round(s.percento) + '%'; b.appendChild(f); q.appendChild(b); }
     else if (s.tipo === 'serie' && s.nonVisti) q.appendChild(el('div', 'num', String(s.nonVisti)));
     if (opz.fonte) q.appendChild(el('div', 'fonte', opz.fonte));
+    var nome = el('div', 'nome', opz.nome || titolo), sotto = el('div', 'sotto', opz.sotto !== undefined ? opz.sotto : sottoJf(s));
+    if (!poster) { var sc = el('div', 'scritta'); sc.appendChild(nome); if (sotto.textContent) sc.appendChild(sotto); q.appendChild(sc); }
     c.appendChild(q);
-    c.appendChild(el('div', 'nome', opz.nome || titolo));
-    c.appendChild(el('div', 'sotto', opz.sotto !== undefined ? opz.sotto : sottoJf(s)));
+    if (poster) { c.appendChild(nome); c.appendChild(sotto); }
     c.addEventListener('click', function () { if (opz.apri) opz.apri(it); else apriJf(it, { indietro: tornaInizio }); });
     var ref = poster ? s.img.poster : opz.ref || s.img.landscape || s.img.fanart || s.img.poster;
     c.carica = function () {
       if (ref) mettiImg(q, '', ref, poster ? 220 : 448, poster ? 330 : 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
     };
     c.scheda = s;
-    fila.appendChild(c);
+    c.info = function () { return infoDaScheda(s, ''); };
+    if (fila) fila.appendChild(c);
     return c;
   }
-  // le immagini delle file vicine a quella scelta (le altre quando ci si arriva): l'inizio parte leggero
+  // una carta in attesa (la sua pagina sta arrivando) e l'ultima di Film e Serie: tutti in griglia
+  function cartaAttesa() {
+    var c = el('div', 'carta poster attesa');
+    c.setAttribute('data-tv', '');
+    c.appendChild(el('div', 'quadro'));
+    c.info = { titolo: '' };
+    return c;
+  }
+  function cartaTutti(chiave, testo, sotto, fn) {
+    var c = el('div', 'carta poster tutti'), q = el('div', 'quadro');
+    c.setAttribute('data-tv', '');
+    c.setAttribute('data-chiave', chiave);
+    q.appendChild(icona(ICONE.avanti));
+    q.appendChild(el('div', 'tt', testo));
+    q.appendChild(el('div', 'ts', sotto));
+    c.appendChild(q);
+    c.addEventListener('click', fn);
+    c.info = { titolo: testo, meta: [sotto], trama: 'Tutti in griglia: per titolo, anno, voto o data, solo quelli da vedere, per genere.' };
+    return c;
+  }
+  // le immagini delle carte che si vedono: la fila scelta e quella sotto (nelle pagine semplici anche quella sopra), dopo una
+  // pausa di 200 ms senza tasti (con le frecce tenute premute non si chiedono copertine che non si vedranno)
+  var vicineTimer = null;
   function caricaVicine() {
+    clearTimeout(vicineTimer);
+    vicineTimer = setTimeout(caricaVicineOra, 200);
+  }
+  function caricaVicineOra() {
     if (!pag) return;
-    for (var r = Math.max(0, pag.r - 1); r <= Math.min(pag.righe.length - 1, pag.r + 2); r++) {
-      var R = pag.righe[r];
-      for (var k = Math.max(0, R.k - 2); k < Math.min(R.voci.length, R.k + 9); k++) {
+    // (nelle pagine semplici, come la scheda, sotto la scelta si vedono anche due file)
+    var da = pag.disponi ? pag.r : Math.max(0, pag.r - 1), a = pag.disponi ? pag.r + 1 : pag.r + 2;
+    for (var r = da; r <= Math.min(pag.righe.length - 1, a); r++) {
+      var R = pag.righe[r], k0 = pag.disponi && r === pag.r ? R.k : Math.max(0, R.k - 1);
+      for (var k = k0; k < Math.min(quanteIn(R), R.k + 9); k++) {
         var c = R.voci[k];
         if (c && c.carica) { var f = c.carica; c.carica = null; f(); }
       }
     }
   }
   function tornaInizio() { apriInizio('tieni'); }
-  // le file di Jellyfin dentro l'inizio: [{ box, sezione, chiave, quando }]
+  // le file di Jellyfin dentro l'inizio: [{ box, sezione, chiave, crea, n, passo }]. Tutte "virtuali": si disegnano solo
+  // le carte vicine alla scelta
   function disegnaRigheJf() {
     var box = $('jf-righe'), out = [], d = jf.dati;
     svuota(box);
-    if (!d && jf.errore === 'rete' && jfAttivo()) {
-      // il server non risponde: una riga sola, col perche' e un pulsante per riprovare
-      var sz = el('section', 'sezione jf-giu'), pp = el('div', 'pulsanti');
-      sz.appendChild(el('h2', '', 'Jellyfin'));
-      sz.appendChild(el('p', 'trama', (jf.stato.server.nome || 'Jellyfin') + ' non risponde: il Mac e\' acceso e Jellyfin e\' aperto? Riprovo da solo.'));
-      pp.appendChild(pulsante('Riprova adesso', 'ripeti', function () { messaggio('Riprovo…'); jfCaricaInizio(true); }));
+    if (!d && jfAttivo()) {
+      // il server non risponde (o le file stanno arrivando): una riga sola, col perche'
+      var giu = jf.errore === 'rete', sz = el('section', 'sezione jf-giu'), pp = el('div', 'pulsanti');
+      sz.appendChild(el('h2', '', giu ? 'Il Mac non risponde' : 'Un attimo'));
+      sz.appendChild(el('p', 'trama', giu ? 'Non raggiungo «' + (jf.stato.server.nome || 'Jellyfin') + '». Controlla che il Mac sia acceso, con Home TV Film aperta: riprovo da solo.' :
+        'Carico i film del Mac…'));
+      if (giu) pp.appendChild(pulsante('Riprova adesso', 'ripeti', function () { messaggio('Riprovo…'); jfCaricaInizio(true); }));
       sz.appendChild(pp);
       box.appendChild(sz);
-      out.push({ box: pp, sezione: sz, chiave: 'jf:giu' });
+      if (giu) out.push({ box: pp, sezione: sz, chiave: 'jf:giu' });
       return out;
     }
     if (!d) return out;
-    function sezione(titolo, chiave, forma, lista, opz) {
-      if (!lista.length) return;
-      var sz = el('section', 'sezione'), fila = el('div', 'fila');
-      sz.appendChild(el('h2', '', titolo));
-      sz.appendChild(fila);
+    function fila(titolo, chiave, n, crea, piccolo) {
+      if (!n) return;
+      var sz = el('section', 'sezione'), f = el('div', 'fila virtuale f-poster'), h = el('h2', '', titolo);
+      if (piccolo) h.appendChild(el('small', '', piccolo));
+      sz.appendChild(h);
+      sz.appendChild(f);
       box.appendChild(sz);
-      lista.forEach(function (x) { if (opz && opz.carta) opz.carta(x, fila); else cartaJf(x, forma, fila, opz); });
-      out.push({ box: fila, sezione: sz, chiave: chiave, quando: function (e) { if (e.scheda) sfondo('', e.scheda.img.fanart || e.scheda.img.poster, false); } });
+      out.push({ box: f, sezione: sz, chiave: chiave, crea: crea, n: n, passo: 0.1185 });
     }
-    sezione('Prossimi episodi', 'jf:prossimi', 'orizzontale', d.prossimi, { sotto: undefined });
-    d.aggiunti.forEach(function (a) { sezione('Aggiunti di recente · ' + a.vista.Name, 'jf:aggiunti:' + a.vista.Id, 'poster', a.voci); });
-    sezione('Le tue librerie', 'jf:viste', 'orizzontale', d.viste, { sotto: '', carta: cartaVista });
-    sezione('Generi', 'jf:generi', '', d.generi, { carta: cartaGenere });
-    sezione('Collezioni', 'jf:collezioni', 'poster', d.collezioni);
-    sezione('Preferiti', 'jf:preferiti', 'poster', d.preferiti);
+    function lista(l, sopra) { return function (i) { return l[i] ? cartaJf(l[i], 'poster', null, { sopra: sopra }) : null; }; }
+    fila('La mia lista', 'jf:lista', d.preferiti.length, lista(d.preferiti, 'La mia lista'));
+    fila('Aggiunti di recente', 'jf:nuovi', d.nuovi.length, lista(d.nuovi, 'Aggiunto di recente'));
+    // una fila per collezione (con almeno due film: le collezioni di TheMovieDb con un film solo non dicono niente)
+    d.collezioni.forEach(function (c) {
+      if (c.voci.length >= 2) fila(String(c.it.Name || ''), 'jf:coll:' + c.it.Id, c.voci.length, lista(c.voci, String(c.it.Name || '')), c.voci.length + ' film');
+    });
+    [{ x: d.film, chiave: 'film', nome: 'Film', tutti: 'Tutti i film', uno: ' film' }, { x: d.serie, chiave: 'serie', nome: 'Serie', tutti: 'Tutte le serie', uno: ' serie' }].forEach(function (y) {
+      var x = y.x;
+      if (!x || !x.tot) return;
+      fila(y.nome, 'jf:' + y.chiave, x.tot + 1, function (i) {
+        if (i === x.tot) return cartaTutti('tutti:' + y.chiave, y.tutti, x.tot + y.uno, function () { apriTuttiJf(x.tipo); });
+        if (x.voci[i]) return cartaJf(x.voci[i], 'poster', null, { sopra: y.nome });
+        caricaPaginaFila(x, Math.floor(i / PAGINA), 'jf:' + y.chiave);
+        return cartaAttesa();
+      }, x.tot + y.uno);
+    });
     return out;
   }
-  function cartaVista(vista, fila) {
-    var c = cartaJf(vista, 'orizzontale', fila, { sotto: vista.CollectionType === 'tvshows' ? 'Serie' : vista.CollectionType === 'boxsets' ? 'Collezioni' : 'Film',
-      apri: function () { apriLibreriaJf({ titolo: vista.Name, vista: vista, indietro: tornaInizio }); } });
-    return c;
-  }
-  function cartaGenere(g, fila) {
-    var c = el('div', 'carta genere'), q = el('div', 'quadro'), h = tinta(g.nome);
-    c.setAttribute('data-tv', '');
-    c.setAttribute('data-chiave', 'genere:' + g.nome);
-    q.style.backgroundImage = 'linear-gradient(135deg, hsl(' + h + ',55%,38%) 0%, hsl(' + ((h + 48) % 360) + ',60%,16%) 100%)';
-    q.appendChild(el('div', 'gn', g.nome));
-    c.appendChild(q);
-    c.addEventListener('click', function () {
-      apriLibreriaJf({ titolo: g.nome, query: { ParentId: g.vista, Genres: g.nome, IncludeItemTypes: 'Movie', Recursive: true }, indietro: tornaInizio });
-    });
-    fila.appendChild(c);
-    return c;
-  }
-  // la fila "Altro": cerca, Jellyfin (collegare o vedere com'e' collegato), anteprime nella scheda
+  // la fila "Altro": cerca, Jellyfin (collegare o vedere com'e' collegato), il Mac, il tetto, la velocita', le anteprime
   function disegnaAltro() {
     var f = $('fila-altro');
     svuota(f);
-    function carta(chiave, ic, nome, stato, fn) {
-      var c = el('div', 'carta altro'), q = el('div', 'quadro');
-      c.setAttribute('data-tv', '');
-      c.setAttribute('data-chiave', 'altro:' + chiave);
-      q.appendChild(icona(ICONE[ic]));
-      if (stato) q.appendChild(el('div', 'stato', stato));
-      c.appendChild(q);
-      c.appendChild(el('div', 'nome', nome));
-      c.addEventListener('click', fn);
+    f.style.transform = '';
+    function carta(chiave, ic, nome, stato, info, fn) {
+      var c = cartaPiccola('altro:' + chiave, ic, nome, stato, fn);
+      c.info = { sopra: 'Altro', titolo: nome, meta: stato ? [stato] : [], trama: info };
       f.appendChild(c);
     }
-    if (jfAttivo()) carta('cerca', 'cerca', 'Cerca', 'film, serie, persone', function () { apriCerca(tornaInizio); });
     var st = jf.stato || {};
-    if (!st.errore || st.server) {
-      carta('jellyfin', 'jellyfin', jfAttivo() ? 'Jellyfin · ' + (st.server.nome || 'server') : 'Collega Jellyfin',
-        jfAttivo() ? (jf.errore === 'rete' ? 'non risponde' : 'collegato come ' + st.utente.nome) : 'film e serie dal Mac', function () { apriCollega(tornaInizio); });
-    }
-    if (jfAttivo()) carta('mac', 'mac', macAttivo() ? 'Senza picchi · Mac' : 'Collega il Mac', macAttivo() ? 'collegato' : 'toglie i picchi dei remux',
-      function () { apriCollegaMac(tornaInizio); });
-    carta('tetto', 'picchi', 'Tetto del TV', tettoTv.mbps + ' Mbps' + (tettoTv.scelta === 'prova' ? ' · misurato' : ''), apriTetto);
-    carta('velocita', 'ingranaggio', 'Velocità del TV', 'per l\'audio DTS', misuraVelocita);
-    carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', function () {
+    if (jfAttivo()) carta('cerca', 'cerca', 'Cerca', 'film, serie, persone', 'Cerca nei film e nelle serie del Mac, o un attore.', function () { apriCerca(tornaInizio); });
+    carta('jellyfin', 'jellyfin', jfAttivo() ? 'Jellyfin · ' + (st.server.nome || 'server') : 'Collega Jellyfin',
+      jfAttivo() ? (jf.errore === 'rete' ? 'non risponde' : 'collegato come ' + st.utente.nome) : 'film e serie dal Mac',
+      jfAttivo() ? 'Il Jellyfin del Mac: da qui vedi com\'è collegato, lo scolleghi o cambi Mac.' : 'Collega il Jellyfin del Mac con un codice.', function () { apriCollega(tornaInizio); });
+    if (jfAttivo()) carta('mac', 'picchi', macAttivo() ? 'Senza picchi · Mac' : 'Collega il Mac', macAttivo() ? 'collegato' : 'toglie i picchi dei remux',
+      'Il limitatore del Mac toglie i picchi dei film troppo pesanti per il TV, senza toccare il resto.', function () { apriCollegaMac(tornaInizio); });
+    carta('tetto', 'ingranaggio', 'Tetto del TV', tettoTv.mbps + ' Mbps' + (tettoTv.scelta === 'prova' ? ' · misurato' : ''),
+      'Quanti Mbps il TV regge senza scatti: oltre, l\'app avvisa e il Mac toglie i picchi.', apriTetto);
+    carta('velocita', 'audio', 'Velocità del TV', 'per l\'audio DTS', 'Quanto è veloce questo TV per convertire da solo l\'audio DTS e TrueHD.', misuraVelocita);
+    carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', 'Il trailer parte da solo, senza audio, dietro la scheda del film.', function () {
       prefs.anteprime = !prefs.anteprime;
+      prefs.anteprimeScelte = true;
       salvaPrefs();
       messaggio(prefs.anteprime ? 'Anteprime accese: il trailer parte da solo, senza audio' : 'Anteprime spente');
       disegnaInizio('tieni');
@@ -1077,26 +1724,6 @@
       if (fermoAperto()) fermo('Velocità del TV', e.codice === 'assente' || e.codice === 'vecchio' ? 'Il servizio di questo TV è vecchio: riavvia il TV.' : 'Non riesco a misurare: riprova.', indietro);
     });
   }
-  // il film grande in cima, da Jellyfin: logo, anno, durata, trama, Riprendi o Guarda
-  function mostraEroeJf(it) {
-    if (!it) return;
-    eroeDi = it;
-    var s = JF.scheda(it), logo = $('eroe-logo'), titolo = s.tipo === 'puntata' && s.serie ? s.serie.titolo : s.titolo;
-    svuota(logo);
-    logo.appendChild(el('h1', '', titolo));
-    if (s.img.logo) mettiImg(logo, '', s.img.logo, 680, 260, true, function (si) { if (si && eroeDi === it) { var h = logo.querySelector('h1'); if (h) logo.removeChild(h); } });
-    metaDi($('eroe-meta'), s, null, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : '');
-    $('eroe-trama').textContent = s.trama;
-    var pp = $('eroe-pulsanti'), ripr = riprendibileJf(s);
-    svuota(pp);
-    pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', function () { guardaJf(it, { ritorno: tornaInizio, t: ripr ? s.punto : 0 }); },
-      ripr ? tempo(s.punto) + ' di ' + tempo(s.durata * 60) : ''));
-    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: tornaInizio, daCapo: true }); }));
-    pp.appendChild(pulsante('Scheda', '', function () { apriJf(it, { indietro: tornaInizio }); }));
-    if (pag && pag.righe[0] && pag.righe[0].chiave === 'eroe') { pag.righe[0].voci = vociDi(pp); if (pag.r === 0) evidenzia(); }
-    sfondo('', s.img.fanart || s.img.landscape || s.img.poster, true);
-  }
-  function mostraEroeDi(c) { if (!c) return; if (c.jf) mostraEroeJf(c.jf); else mostraEroe(c.x); }
 
   // OK su una voce di Jellyfin: film, puntata e serie la scheda; collezioni e librerie la griglia; persone la loro pagina
   function apriJf(it, opz) {
@@ -1123,7 +1750,8 @@
     svuota($('sc-pulsanti'));
     svuota($('sc-righe'));
     $('sc-avviso').hidden = true;
-    ['sez-stagioni', 'sez-puntate', 'sez-cast', 'sez-simili'].forEach(function (id) { $(id).hidden = true; });
+    $('sc-resta').hidden = true;
+    ['sez-stagioni', 'sez-puntate', 'sez-collezione', 'sez-cast', 'sez-simili', 'sez-info'].forEach(function (id) { $(id).hidden = true; });
     nuovaPagina($('scheda-corpo'));
     evidenzia();
   }
@@ -1176,48 +1804,87 @@
     }
     metaDi($('sc-meta'), s, null, '');
     if (s.durata) $('sc-meta').appendChild(el('span', '', finisceAlle(s.durata * 60 - (riprendibileJf(s) ? s.punto : 0))));
-    var badge = $('sc-badge');
-    svuota(badge);
-    JF.badge(it, L0).forEach(function (b) {
-      badge.appendChild(el('span', 'badge' + (b.forte ? ' forte' : '') + (b.no ? ' no' : '') + (b.conv ? ' conv' : ''), b.t + (b.conv ? ' · convertito' : '')));
-    });
+    etichetteIn($('sc-badge'), JF.etichette(it));
     $('sc-slogan').textContent = s.slogan;
     $('sc-trama').textContent = s.trama;
     var pp = $('sc-pulsanti'), ripr = riprendibileJf(s);
     svuota(pp);
     x.guarda = function () { guardaJf(it, { ritorno: riapriScheda(x), t: ripr ? s.punto : 0 }); };
     pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', x.guarda, ripr ? 'da ' + tempo(s.punto) : ''));
-    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: riapriScheda(x), daCapo: true }); }));
+    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: riapriScheda(x), daCapo: true }); }, '', true));
     if (s.trailer) pp.appendChild(pulsante('Trailer', 'trailer', function () { guardaTrailerJf(x); }));
-    pp.appendChild(pulsanteStato(s.preferito, 'cuore', 'Preferito', function (b) { cambiaPreferito(x, b); }));
+    pp.appendChild(pulsanteStato(s.preferito, 'lista', 'La mia lista', function (b) { cambiaPreferito(x, b); }));
     pp.appendChild(pulsanteStato(s.visto, 'spunta', 'Visto', function (b) { cambiaVisto(x, b); }));
-    var righe = $('sc-righe');
+    restaIn($('sc-resta'), ripr && s.durata ? s.punto / (s.durata * 60) : -1, ripr && s.durata ? s.durata * 60 - s.punto : 0);
+    var righe = $('sc-righe'), v0 = ms ? JF.flussi(ms, 'Video')[0] : null, a0 = ms ? JF.flussi(ms, 'Audio') : [];
     svuota(righe);
-    function riga(a, b) { if (!b) return; var r = el('div'); r.appendChild(document.createTextNode(a + '  ')); r.appendChild(el('b', '', b)); righe.appendChild(r); }
+    function riga(a, b) { if (!b) return; var r = el('div'); r.appendChild(el('span', 'k', a)); r.appendChild(el('b', '', b)); righe.appendChild(r); }
     riga('Regia', s.registi.join(', '));
     riga('Scritto da', s.scrittori.join(', '));
     riga('Studio', s.studi.join(', '));
     var strada = JF.strada(it, L0);
+    if (v0) riga('Video', [JF.nomeVideo(v0), (+v0.Width || 0) + '×' + (+v0.Height || 0), hdrDi(v0.VideoRangeType || v0.VideoRange) === 'DV' ? 'Dolby Vision' :
+      hdrDi(v0.VideoRangeType || v0.VideoRange)].filter(Boolean).join(' · '));
+    if (a0.length) riga('Audio', a0.slice(0, 4).map(function (t) {
+      var legge = !L0 || L0.audio[JF.famiglia(t.Codec)] === true;
+      return nomeLingua(lingua3(t.Language)) + ' ' + JF.nomeAudio(t) + (t.Channels ? ' ' + canali(+t.Channels) : '') + (legge ? '' : ' (lo converte il server)');
+    }).join(', ') + (a0.length > 4 ? '…' : ''));
     if (ms) riga('File', String(ms.Path || ms.Name || '').split(/[\/\\]/).pop() + (ms.Size ? ' · ' + peso(ms.Size) : '') +
       (ms.Bitrate ? ' · ' + String(Math.round(ms.Bitrate / 1e5) / 10).replace('.', ',') + ' Mbps' : ''));
     riga('Al TV', strada === 'diretta' ? 'il file vero, come da una chiavetta' : strada === 'audio' ? 'video originale, audio convertito dal server' :
       strada === 'converti' ? 'convertito dal server' : '');
+    $('sez-info').hidden = !righe.children.length;
     var avv = '';
     if (strada === 'converti') avv = 'Il TV non legge questo video cosi\' com\'e\': lo converte Jellyfin (il Mac lavora, la qualita\' cala un po\').';
     else if (strada === 'audio') avv = 'L\'audio di questo film il TV non lo legge: Jellyfin lo converte in Dolby Digital Plus, il video resta l\'originale.';
     else if (ms && ms.Bitrate > 80e6) avv = 'File molto pesante (' + Math.round(ms.Bitrate / 1e6) + ' Mbps): su alcuni TV Samsung del 2022 oltre 80 Mbps il video puo\' scattare. Nel pannello del lettore c\'e\' la qualita\'.';
     $('sc-avviso').textContent = avv;
     $('sc-avviso').hidden = !avv;
-    sfondo('', s.img.fanart || s.img.landscape || s.img.poster, true, true);
+    sfondo('', s.img.fanart || s.img.landscape || s.img.poster, !!(s.img.fanart || s.img.landscape), true);
     disegnaCast(x);
+    disegnaCollezione(x);
     disegnaSimili(x);
     righeScheda(x);
   }
-  // un pulsante acceso/spento (preferito, visto)
+  // le etichette della scheda: 4K, HDR10, 5.1, Sottotitoli
+  function etichetteIn(box, l) {
+    svuota(box);
+    l.forEach(function (t) { box.appendChild(el('span', 'badge', t)); });
+  }
+  // sotto i pulsanti: la barra di quanto hai visto e quanto manca (f < 0: niente)
+  function restaIn(box, f, sec) {
+    svuota(box);
+    box.hidden = !(f > 0);
+    if (!(f > 0)) return;
+    var i = el('i'), b = el('b');
+    b.style.width = Math.min(100, Math.round(f * 100)) + '%';
+    i.appendChild(b);
+    box.appendChild(i);
+    box.appendChild(document.createTextNode('Mancano ' + durataResta(sec)));
+  }
+  // un pulsante tondo acceso/spento (La mia lista, visto): la scritta compare sotto quando e' scelto
   function pulsanteStato(acceso, ic, testo, fn) {
-    var b = pulsante(testo, ic, function () { fn(b); });
+    var b = pulsante(testo, ic, function () { fn(b); }, '', true);
     if (acceso) b.className += ' acceso';
     return b;
+  }
+  // gli altri film della stessa collezione (MCU, "Iron Man - Collezione"...): la prima che lo contiene, in ordine di uscita
+  function disegnaCollezione(x) {
+    var f = $('fila-collezione'), c = collezioniDi(x.id)[0], altri = c ? c.voci.filter(function (it) { return it.Id !== x.id; }) : [];
+    svuota(f);
+    f.style.transform = '';
+    $('sez-collezione').hidden = !altri.length;
+    var h = $('collezione-titolo');
+    svuota(h);
+    h.appendChild(document.createTextNode('Altri della collezione'));
+    if (c) h.appendChild(el('small', '', String(c.it.Name || '')));
+    f.className = 'fila virtuale f-poster';
+    x.altriCollezione = altri;
+  }
+  function righeCollezione(x) {
+    var l = x.altriCollezione || [];
+    aggiungiRiga($('fila-collezione'), [], { sezione: $('sez-collezione'), chiave: 'collezione', n: l.length, passo: 0.1185,
+      crea: function (i) { var it = l[i]; return it ? cartaJf(it, 'poster', null, { apri: function () { apriJf(it, { indietro: riapriScheda(x) }); } }) : null; } });
   }
   function cambiaPreferito(x, b) {
     var si = !/\bacceso\b/.test(b.className);
@@ -1225,6 +1892,7 @@
     chiediJf('UserFavoriteItems/' + x.id, { userId: uid() }, si ? {} : null, si ? 'POST' : 'DELETE').then(function () {
       x.s.preferito = si;
       jf.caricato = 0;
+      aggiornaVoceLenti(x.id);
       messaggio(si ? 'Nei preferiti' : 'Tolto dai preferiti');
     }, function () { messaggio('Jellyfin non risponde: riprova'); });
   }
@@ -1234,6 +1902,7 @@
     chiediJf('UserPlayedItems/' + x.id, { userId: uid() }, si ? {} : null, si ? 'POST' : 'DELETE').then(function () {
       x.s.visto = si;
       jf.caricato = 0;
+      aggiornaVoceLenti(x.id);
       messaggio(si ? 'Segnato come visto' : 'Segnato da vedere');
     }, function () { messaggio('Jellyfin non risponde: riprova'); });
   }
@@ -1241,25 +1910,30 @@
     var f = $('fila-simili');
     svuota(f);
     $('sez-simili').hidden = !x.simili.length;
-    x.simili.forEach(function (it) { var c = cartaJf(it, 'poster', f, { apri: function () { apriJf(it, { indietro: riapriScheda(x) }); } }); c.carica(); c.carica = null; });
+    x.simili.forEach(function (it) { cartaJf(it, 'poster', f, { apri: function () { apriJf(it, { indietro: riapriScheda(x) }); } }); });
   }
   // le righe della scheda col telecomando (la scelta resta dov'era: tornando da una persona o dal lettore)
   function righeScheda(x) {
     var vecchia = pag && pag.corpo === $('scheda-corpo') ? pag : null, R0 = vecchia ? vecchia.righe[vecchia.r] : null;
-    var voluta = R0 ? { chiave: R0.chiave, k: R0.k } : x.opz.riga || null;
-    x.opz.riga = null;
+    var voluta = R0 ? { chiave: R0.chiave, k: R0.k } : null;
+    // la riga dove tornare (dal lettore, da una persona) vale finche' non arriva, se intanto non ci si e' mossi
+    if (vecchia && vecchia.mosso) x.opz.riga = null;
     nuovaPagina($('scheda-corpo'));
     var pp = $('sc-pulsanti');
     aggiungiRiga(pp, vociDi(pp), { sezione: $('sc-sopra'), chiave: 'pulsanti' });
     if (!$('sez-stagioni').hidden) aggiungiRiga($('fila-stagioni'), vociDi($('fila-stagioni')), { sezione: $('sez-stagioni'), k: x.k, chiave: 'stagioni' });
-    if (!$('sez-puntate').hidden) aggiungiRiga($('fila-puntate'), vociDi($('fila-puntate')), { sezione: $('sez-puntate'), chiave: 'puntate', k: x.kPuntata || 0 });
+    if (!$('sez-puntate').hidden) righePuntate(x);
+    if (!$('sez-collezione').hidden) righeCollezione(x);
     if (!$('sez-cast').hidden) aggiungiRiga($('fila-cast'), vociDi($('fila-cast')), { sezione: $('sez-cast'), chiave: 'cast' });
     if (!$('sez-simili').hidden) aggiungiRiga($('fila-simili'), vociDi($('fila-simili')), { sezione: $('sez-simili'), chiave: 'simili' });
+    if (!$('sez-info').hidden) aggiungiRiga($('fila-info'), vociDi($('fila-info')), { sezione: $('sez-info'), chiave: 'info' });
+    for (var r0 = 0; x.opz.riga && r0 < pag.righe.length; r0++) if (pag.righe[r0].chiave === x.opz.riga.chiave) { voluta = x.opz.riga; x.opz.riga = null; }
     if (voluta) {
       for (var r = 0; r < pag.righe.length; r++) {
-        if (pag.righe[r].chiave === voluta.chiave) { pag.r = r; pag.righe[r].k = Math.min(voluta.k, Math.max(0, pag.righe[r].voci.length - 1)); }
+        if (pag.righe[r].chiave === voluta.chiave) { pag.r = r; pag.righe[r].k = Math.min(voluta.k, Math.max(0, quanteIn(pag.righe[r]) - 1)); }
       }
     }
+    if (vecchia && vecchia.mosso) pag.mosso = true;
     evidenzia();
   }
   // una serie: le stagioni, le puntate della stagione scelta, Riprendi o Guarda la prossima (lo dice Jellyfin)
@@ -1291,15 +1965,13 @@
     var fs = $('fila-stagioni');
     svuota(fs);
     $('sez-stagioni').hidden = x.stagioni.length < 2;
+    // le stagioni: linguette (OK cambia le puntate qui sotto)
     x.stagioni.forEach(function (st, i) {
-      var ss = JF.scheda(st), c = el('div', 'stagione' + (i === x.k ? ' attiva' : '')), cop = el('div', 'copertina');
-      cop.appendChild(finta(ss.titolo, '', 'stagione'));
-      c.appendChild(cop);
-      c.appendChild(el('div', 'nome', ss.titolo));
+      var ss = JF.scheda(st), c = el('div', 'stagione' + (i === x.k ? ' attiva' : ''));
+      c.appendChild(el('span', 'nome', ss.titolo));
       c.setAttribute('data-tv', '');
       c.addEventListener('click', function () { x.k = i; x.stagioneId = st.Id; puntateJf(x); });
       fs.appendChild(c);
-      if (ss.img.poster) mettiImg(cop, '', ss.img.poster, 192, 288);
     });
     x.stagioneId = x.stagioni[x.k] ? x.stagioni[x.k].Id : '';
     puntateJf(x);
@@ -1318,24 +1990,30 @@
   function disegnaPuntateJf(x) {
     var fp = $('fila-puntate'), st = x.stagioni[x.k];
     svuota(fp);
+    fp.className = 'fila virtuale f-puntata';
+    fp.style.transform = '';
     $('sez-puntate').hidden = !x.puntate.length;
     $('puntate-titolo').textContent = (st ? JF.scheda(st).titolo : 'Puntate') + ' · ' + x.puntate.length + (x.puntate.length === 1 ? ' puntata' : ' puntate');
     x.kPuntata = 0;
-    x.puntate.forEach(function (ep, j) {
+    x.puntate.forEach(function (ep, j) { if (x.prossima && x.prossima.Id === ep.Id) x.kPuntata = j; });
+    // una stagione puo' avere 300 puntate: si fanno solo le carte vicine alla scelta (la fila e' virtuale, vedi righePuntate)
+    x.cartaPuntata = function (j) {
+      var ep = x.puntate[j];
+      if (!ep) return null;
       var s = JF.scheda(ep), c = el('div', 'carta puntata'), q = el('div', 'quadro');
       q.appendChild(finta(s.titolo, 'S' + s.stagione + ' E' + s.episodio, 'puntata'));
       q.appendChild(el('div', 'num', 'E' + (s.episodio >= 0 ? s.episodio : j + 1)));
       if (s.visto) { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); q.appendChild(vs); }
       else if (s.percento > 0) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.round(s.percento) + '%'; b.appendChild(f); q.appendChild(b); }
-      if (x.prossima && x.prossima.Id === ep.Id) x.kPuntata = j;
       c.appendChild(q);
       c.appendChild(el('div', 'nome', (s.episodio >= 0 ? s.episodio + '. ' : '') + s.titolo));
+      if (s.durata > 1) c.appendChild(el('div', 'dur', durataBella(s.durata)));
       c.appendChild(el('div', 'trama-p', s.trama));
       c.setAttribute('data-tv', '');
       c.addEventListener('click', function () { guardaJf(ep, { ritorno: riapriScheda(x), t: riprendibileJf(s) ? s.punto : 0 }); });
-      fp.appendChild(c);
-      if (s.img.landscape) mettiImg(q, '', s.img.landscape, 403, 227);
-    });
+      c.carica = function () { if (s.img.landscape) mettiImg(q, '', s.img.landscape, 448, 252); };
+      return c;
+    };
     var pp = $('sc-pulsanti'), p = x.prossima;
     svuota(pp);
     if (p) {
@@ -1346,9 +2024,13 @@
       x.guarda = function () { guardaJf(x.puntate[0], { ritorno: riapriScheda(x) }); };
       pp.appendChild(pulsante('Guarda', 'play', x.guarda, 'S' + JF.scheda(x.puntate[0]).stagione + ' E1'));
     } else x.guarda = null;
-    pp.appendChild(pulsanteStato(x.s.preferito, 'cuore', 'Preferito', function (b) { cambiaPreferito(x, b); }));
+    pp.appendChild(pulsanteStato(x.s.preferito, 'lista', 'La mia lista', function (b) { cambiaPreferito(x, b); }));
     disegnaSimili(x);
     righeScheda(x);
+  }
+  // le puntate nelle righe della scheda: una fila virtuale
+  function righePuntate(x) {
+    aggiungiRiga($('fila-puntate'), [], { sezione: $('sez-puntate'), chiave: 'puntate', k: x.kPuntata || 0, crea: x.cartaPuntata, n: x.puntate.length, passo: 0.2245 });
   }
 
   /* ---------------------------------------------------------- il trailer dietro la scheda (senza audio) */
@@ -1663,12 +2345,15 @@
       jf.stato = r;
       collegaCodice();
     }, function (e) {
-      messaggio(e.codice === 'indirizzo' ? 'Indirizzo non valido' : e.codice === 'jellyfin' ? 'A quell\'indirizzo non risponde Jellyfin' :
-        e.codice === 'troppe' ? 'Troppi indirizzi provati: riprova tra qualche minuto' :
-        e.codice === 'certificato' ? 'Il TV non accetta il certificato https di quel server: prova con http://' + indirizzo.replace(/^https?:\/\//i, '') :
-        e.codice === 'rete' ? 'Il server non risponde: e\' acceso?' : 'Non riesco a collegarmi', 5000);
+      messaggio(erroreServer(e, indirizzo), 5000);
       $('collega-testo').textContent = 'Riprova, o scrivi un altro indirizzo.';
     });
+  }
+  function erroreServer(e, indirizzo) {
+    return e.codice === 'indirizzo' ? 'Indirizzo non valido' : e.codice === 'jellyfin' ? 'A quell\'indirizzo non risponde Jellyfin' :
+      e.codice === 'troppe' ? 'Troppi indirizzi provati: riprova tra qualche minuto' :
+      e.codice === 'certificato' ? 'Il TV non accetta il certificato https di quel server: prova con http://' + String(indirizzo).replace(/^https?:\/\//i, '') :
+      e.codice === 'rete' ? 'Il server non risponde: e\' acceso?' : 'Non riesco a collegarmi';
   }
   // Quick Connect: il codice sul TV, la conferma dal telefono (o dal computer) dove Jellyfin e' gia' aperto
   function collegaCodice() {
@@ -1681,7 +2366,7 @@
     collegaPagina('Collega ' + nome, 'Preparo il codice…', altri);
     chiedi('jf/qc', null, {}).then(function (r) {
       if (giro !== coll.giro || schermo !== 'collega') return;
-      $('qc-codice').textContent = r.codice;
+      cifreIn($('qc-codice'), String(r.codice || ''));
       $('qc-codice').hidden = false;
       collegaPagina('Collega ' + nome, 'Sul telefono apri Jellyfin, tocca il tuo profilo, poi Quick Connect, e scrivi questo codice.\n' +
         'Dal computer: la tua immagine in alto a destra › Quick Connect.', altri);
@@ -1691,7 +2376,7 @@
           chiedi('jf/qc').then(function (s) {
             if (giro !== coll.giro || schermo !== 'collega') return;
             if (s.stato === 'fatto') { collegato(); return; }
-            if (s.stato === 'scaduto') { collegaCodice(); return; }
+            if (s.stato === 'scaduto' || s.stato === 'nessuno') { collegaCodice(); return; }
             controlla();
           }, function () { if (giro === coll.giro) controlla(); });
         }, 2500);
@@ -1702,15 +2387,18 @@
         e.codice === 'rete' ? 'Jellyfin non risponde: il Mac e\' acceso?' : 'Non riesco a preparare il codice.', altri);
     });
   }
-  function collegaPassword() {
+  // nome e password; senza (o sbagliati) si torna da dove si era venuti (il codice del collegamento, o il riquadro del Mac)
+  function collegaPassword(indietro) {
+    var poi = typeof indietro === 'function' ? indietro : collegaCodice;
     coll.giro++;
+    if (typeof indietro === 'function') benvFerma();
     HomeTV.chiediTesto({ titolo: 'Nome utente di Jellyfin', valore: '' }).then(function (nome) {
-      if (!nome) { collegaCodice(); return; }
+      if (!nome) { poi(); return; }
       HomeTV.chiediTesto({ titolo: 'Password di ' + nome, valore: '' }).then(function (pw) {
-        if (pw === null || pw === undefined) { collegaCodice(); return; }
+        if (pw === null || pw === undefined) { poi(); return; }
         chiedi('jf/accedi', null, { nome: nome, password: pw }).then(function () { collegato(); }, function (e) {
           messaggio(e.codice === 'password' ? 'Nome o password sbagliati' : 'Non riesco a entrare', 5000);
-          collegaCodice();
+          poi();
         });
       });
     });
@@ -1719,7 +2407,7 @@
     coll.giro++;
     jfCaricaStato(function () {
       messaggio(jfAttivo() ? 'Jellyfin collegato: ciao ' + jf.stato.utente.nome + '!' : 'Jellyfin collegato', 4000);
-      jfCaricaInizio(true);
+      jfCaricaInizio('tutto');
       apriInizio('tieni');
     });
   }
@@ -1844,8 +2532,8 @@
   }
   function unisci(p, nome) { return p ? p + '/' + nome : nome; }
   function misureGriglia() {
-    var W = window.innerWidth, H = window.innerHeight, col = 7, tw = W * 0.114;
-    return { col: col, tw: tw, th: tw * 1.5 + H * 0.105, gx: (W * 0.9 - col * tw) / (col - 1), pw: Math.round(tw * 1.25), ph: Math.round(tw * 1.875) };
+    var W = window.innerWidth, H = window.innerHeight, col = 7, tw = W * 0.106;
+    return { col: col, tw: tw, th: tw * 1.5 + H * 0.098, gx: (W * 0.88 - col * tw) / (col - 1), pw: Math.round(tw * 1.25), ph: Math.round(tw * 1.875) };
   }
   function disegnaLibreria() {
     var g = $('griglia-dentro');
@@ -1994,7 +2682,7 @@
       $('ls-titolo').textContent = v.s.titolo;
       metaDi($('ls-meta'), v.s, null, v.s.tipo === 'serie' ? 'Serie' : v.s.tipo === 'collezione' ? 'Collezione' : '');
       $('ls-trama').textContent = v.s.trama;
-      sfondo('', v.s.img.fanart || v.s.img.poster || null, false);
+      sfondo('', v.s.img.fanart || v.s.img.poster || null, !!v.s.img.fanart);
       return;
     }
     if (!v) return;
@@ -2004,7 +2692,8 @@
       metaDi($('ls-meta'), s, null, s.tipo === 'puntata' ? 'S' + s.stagione + ' E' + s.episodio + (s.titolo ? ' · ' + s.titolo : '') : s.tipo === 'serie' ? 'Serie' :
         s.tipo === 'stagione' ? s.titolo : s.tipo === 'cartella' ? 'Cartella' : '');
       $('ls-trama').textContent = s.trama || (s.serie && s.serie.trama) || '';
-      sfondo(lib.d, s.img.fanart || s.img.landscape || s.img.poster || (s.serie && s.serie.img && s.serie.img.fanart) || null, false);
+      var fa = s.img.fanart || s.img.landscape || (s.serie && s.serie.img && s.serie.img.fanart) || null;
+      sfondo(lib.d, fa || s.img.poster || null, !!fa);
     } else {
       svuota($('ls-meta'));
       $('ls-meta').textContent = v.tipo === 'cartella' ? 'Cartella' : (tt.anno ? tt.anno + '   ' : '') + peso(v.dim);
@@ -2074,7 +2763,8 @@
     svuota($('sc-pulsanti'));
     svuota($('sc-righe'));
     $('sc-avviso').hidden = true;
-    ['sez-stagioni', 'sez-puntate', 'sez-cast'].forEach(function (id) { $(id).hidden = true; });
+    $('sc-resta').hidden = true;
+    ['sez-stagioni', 'sez-puntate', 'sez-collezione', 'sez-cast', 'sez-simili', 'sez-info'].forEach(function (id) { $(id).hidden = true; });
     nuovaPagina($('scheda-corpo'));
     evidenzia();
     var video = opz.video !== undefined ? !!opz.video : /\.(mkv|webm|mk3d|mp4|m4v|mov|avi|ts|m2ts|mts|mpg|mpeg|wmv|asf|3gp|vob|flv|trp|tp)$/i.test(nome);
@@ -2111,9 +2801,7 @@
     }
     metaDi($('sc-meta'), s, info, '');
     if (info && info.durata) $('sc-meta').appendChild(el('span', '', finisceAlle(info.durata - (riprendibile(puntoDi(d, x.p, info.dim), info.durata) ? puntoDi(d, x.p, info.dim).t : 0))));
-    var badge = $('sc-badge');
-    svuota(badge);
-    if (info) badgeDi(info, x.audio).forEach(function (b) { badge.appendChild(el('span', 'badge' + (b.forte ? ' forte' : '') + (b.no ? ' no' : ''), b.t)); });
+    etichetteIn($('sc-badge'), info ? etichetteInfo(info) : []);
     $('sc-slogan').textContent = s.slogan || '';
     $('sc-trama').textContent = s.trama || (s.serie && s.serie.trama) || '';
     // i pulsanti: Guarda o Riprendi, Dall'inizio, Audio e Sottotitoli scelti prima di partire
@@ -2125,7 +2813,8 @@
     }
     x.guarda = function () { parti(false); };
     pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', function () { parti(false); }, ripr ? 'da ' + tempo(pt.t) : ''));
-    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { parti(true); }));
+    if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { parti(true); }, '', true));
+    restaIn($('sc-resta'), ripr && info.durata ? pt.t / info.durata : -1, ripr && info.durata ? info.durata - pt.t : 0);
     if (info) {
       var buoni = info.audio.filter(function (a) { return a.letto; });
       if (buoni.length > 1) {
@@ -2151,11 +2840,16 @@
     // le righe: regia, generi, studio, file
     var righe = $('sc-righe');
     svuota(righe);
-    function riga(a, b) { if (!b) return; var r = el('div'); r.appendChild(document.createTextNode(a + '  ')); r.appendChild(el('b', '', b)); righe.appendChild(r); }
+    function riga(a, b) { if (!b) return; var r = el('div'); r.appendChild(el('span', 'k', a)); r.appendChild(el('b', '', b)); righe.appendChild(r); }
     riga('Regia', (s.registi || []).join(', '));
     riga('Scritto da', (s.scrittori || []).join(', '));
     riga('Studio', (s.studi || []).join(', '));
+    if (info && info.video) riga('Video', info.video.nomeCodec + ' · ' + info.video.largh + '×' + info.video.alt + (info.video.hdr ? ' · ' + (info.video.hdr === 'DV' ? 'Dolby Vision (il TV usa HDR10)' : info.video.hdr) : ''));
+    if (info && info.audio.length) riga('Audio', info.audio.slice(0, 4).map(function (a) {
+      return nomeLingua(a.lingua) + ' ' + a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') + (a.tv ? ' (lo converte il TV)' : a.letto ? '' : ' (il TV non lo legge)');
+    }).join(', ') + (info.audio.length > 4 ? '…' : ''));
     if (info) riga('File', x.p.split('/').pop() + ' · ' + peso(info.dim) + (info.mbps ? ' · ' + String(info.mbps).replace('.', ',') + ' Mbps' : ''));
+    $('sez-info').hidden = !righe.children.length;
     var avv = info ? avvisoDi(info) : '';
     // il TV non sente questo film: lo stesso su Jellyfin si sente (il Mac converte l'audio)
     if (info && info.avvisi.indexOf('audio') !== -1) {
@@ -2177,6 +2871,7 @@
     nuovaPagina($('scheda-corpo'));
     aggiungiRiga(pp, vociDi(pp), { sezione: $('sc-sopra'), k: k0 });
     if (!$('sez-cast').hidden) aggiungiRiga($('fila-cast'), vociDi($('fila-cast')), { sezione: $('sez-cast') });
+    if (!$('sez-info').hidden) aggiungiRiga($('fila-info'), vociDi($('fila-info')), { sezione: $('sez-info'), chiave: 'info' });
     evidenzia();
   }
   function disegnaCast(x) {
@@ -2193,7 +2888,8 @@
       p.setAttribute('data-tv', '');
       p.addEventListener('click', function () { if (x.jf && c.id) apriPersonaJf(c.id, riapriScheda(x)); });
       fila.appendChild(p);
-      if (c.foto) mettiImg(f, x.d || '', c.foto, 180, 180);
+      // la foto quando la fila del cast si avvicina (caricaVicine)
+      if (c.foto) p.carica = function () { mettiImg(f, x.d || '', c.foto, 180, 180); };
     });
   }
   // una serie (o una sua stagione): le stagioni, le puntate della stagione scelta, Riprendi la puntata giusta
@@ -2235,13 +2931,11 @@
     svuota(fs);
     $('sez-stagioni').hidden = x.stagioni.length < 2;
     x.stagioni.forEach(function (st, i) {
-      var c = el('div', 'stagione' + (i === x.k ? ' attiva' : '')), cop = el('div', 'copertina');
-      cop.appendChild(finta(st.n ? 'Stagione ' + st.n : st.nome, '', 'stagione'));
-      c.appendChild(cop);
-      c.appendChild(el('div', 'nome', st.n ? 'Stagione ' + st.n : st.nome));
+      var c = el('div', 'stagione' + (i === x.k ? ' attiva' : ''));
+      c.appendChild(el('span', 'nome', st.n ? 'Stagione ' + st.n : st.nome));
+      c.setAttribute('data-tv', '');
       c.addEventListener('click', function () { x.k = i; puntateDi(x); });
       fs.appendChild(c);
-      if (st.p !== x.cartellaSerie) chiediScheda(d, st.p, false, function (ss) { if (ss && ss.img.poster && c.parentNode) mettiImg(cop, d, ss.img.poster, 192, 288); });
     });
     puntateDi(x);
   }
@@ -2261,31 +2955,39 @@
   function disegnaPuntate(x) {
     var fp = $('fila-puntate'), d = x.d, st = x.stagioni[x.k];
     svuota(fp);
+    fp.className = 'fila virtuale f-puntata';
+    fp.style.transform = '';
     $('sez-puntate').hidden = !x.puntate.length;
     $('puntate-titolo').textContent = st ? (st.n ? 'Stagione ' + st.n : st.nome) + ' · ' + x.puntate.length + (x.puntate.length === 1 ? ' puntata' : ' puntate') : 'Puntate';
     var stg = $('fila-stagioni').children;
     for (var i = 0; i < stg.length; i++) stg[i].className = 'stagione' + (i === x.k ? ' attiva' : '');
     var daRiprendere = null;
-    x.puntate.forEach(function (v, j) {
+    x.puntate.forEach(function (v) { var pt = puntoDi(d, v.p, v.dim); if (!daRiprendere && riprendibile(pt)) daRiprendere = { v: v, pt: pt }; });
+    // la fila e' virtuale: le carte (e le loro schede) solo vicino alla scelta
+    x.cartaPuntata = function (j) {
+      var v = x.puntate[j];
+      if (!v) return null;
       var c = el('div', 'carta puntata'), q = el('div', 'quadro'), tt = titoloDi(v.nome), pt = puntoDi(d, v.p, v.dim);
       q.appendChild(finta(tt.titolo, 'S' + (tt.stagione || 1) + ' E' + (tt.episodio || j + 1), 'puntata'));
       q.appendChild(el('div', 'num', 'E' + (tt.episodio || j + 1)));
       if (pt && pt.finito) { var vs = el('div', 'vista'); vs.appendChild(icona(ICONE.spunta)); q.appendChild(vs); }
-      else if (riprendibile(pt)) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.min(100, Math.round(pt.t / Math.max(1, pt.dur) * 100)) + '%'; b.appendChild(f); q.appendChild(b); if (!daRiprendere) daRiprendere = { v: v, pt: pt }; }
+      else if (riprendibile(pt)) { var b = el('div', 'barra'), f = el('i'); f.style.width = Math.min(100, Math.round(pt.t / Math.max(1, pt.dur) * 100)) + '%'; b.appendChild(f); q.appendChild(b); }
       c.appendChild(q);
       var nome = el('div', 'nome', 'Puntata ' + (tt.episodio || j + 1)), sotto = el('div', 'trama-p', '');
       c.appendChild(nome);
       c.appendChild(sotto);
+      c.setAttribute('data-tv', '');
       c.addEventListener('click', function () { guardaPuntata(x, v); });
-      fp.appendChild(c);
       chiediScheda(d, v.p, false, function (s) {
-        if (!s || !c.parentNode) return;
+        // (puo' arrivare subito, dalla memoria: la carta non e' ancora nella fila, la mette disegnaRiga)
+        if (!s) return;
         if (s.titolo) nome.textContent = (s.episodio >= 0 ? s.episodio + '. ' : '') + s.titolo;
         sotto.textContent = s.trama || '';
         var ref = s.img.landscape || s.img.fanart;
-        if (ref) mettiImg(q, d, ref, 403, 227);
+        if (ref) mettiImg(q, d, ref, 448, 252);
       });
-    });
+      return c;
+    };
     // Riprendi la puntata a meta' (la piu' recente), se no Guarda la prossima da vedere
     var pp = $('sc-pulsanti');
     svuota(pp);
@@ -2305,9 +3007,10 @@
     nuovaPagina($('scheda-corpo'));
     aggiungiRiga(pp, vociDi(pp), { sezione: $('sc-sopra'), chiave: 'pulsanti' });
     if (!$('sez-stagioni').hidden) aggiungiRiga($('fila-stagioni'), vociDi($('fila-stagioni')), { sezione: $('sez-stagioni'), k: x.k, chiave: 'stagioni' });
-    aggiungiRiga(fp, vociDi(fp), { sezione: $('sez-puntate'), chiave: 'puntate', k: daRiprendere ? x.puntate.indexOf(daRiprendere.v) : 0 });
+    x.kPuntata = daRiprendere ? x.puntate.indexOf(daRiprendere.v) : 0;
+    if (x.puntate.length) righePuntate(x);
     if (!$('sez-cast').hidden) aggiungiRiga($('fila-cast'), vociDi($('fila-cast')), { sezione: $('sez-cast'), chiave: 'cast' });
-    for (var r = 0; r < pag.righe.length; r++) if (chiaveR && pag.righe[r].chiave === chiaveR) { pag.r = r; if (chiaveR === 'stagioni') pag.righe[r].k = x.k; else if (chiaveR !== 'puntate') pag.righe[r].k = Math.min(kp, pag.righe[r].voci.length - 1); }
+    for (var r = 0; r < pag.righe.length; r++) if (chiaveR && pag.righe[r].chiave === chiaveR) { pag.r = r; if (chiaveR === 'stagioni') pag.righe[r].k = x.k; else if (chiaveR !== 'puntate') pag.righe[r].k = Math.min(kp, quanteIn(pag.righe[r]) - 1); }
     evidenzia();
   }
   function guardaPuntata(x, v) {
@@ -2352,6 +3055,29 @@
     else if (info.audio.length) out.push({ t: 'AUDIO NON LETTO', no: true });
     if (info.sotto.length) out.push({ t: 'SOTTOTITOLI' });
     return out;
+  }
+  // le etichette semplici della scheda di un film della chiavetta (come JF.etichette): 4K, HDR, 5.1, Sottotitoli
+  function etichetteInfo(info) {
+    var out = [], v = info.video, mx = 0;
+    if (v) {
+      out.push(v.largh >= 3200 ? '4K' : v.largh >= 1260 ? 'HD' : 'SD');
+      if (v.hdr) out.push(v.hdr === 'DV' ? 'Dolby Vision' : v.hdr);
+    }
+    info.audio.forEach(function (a) { mx = Math.max(mx, a.canali || 0); });
+    if (mx >= 6) out.push(canali(mx));
+    if (info.sotto.length) out.push('Sottotitoli');
+    return out;
+  }
+  // le insegne in alto nel lettore: 4K, l'HDR (o "SDR · colori adattati" se Jellyfin converte), i canali dell'audio scelto
+  function badgeOsd(info, audio, conv) {
+    return badgeDi(info, audio, conv).filter(function (b, i) { return i === 0 || b.conv && /colori/.test(b.t) || b.no || /^(HDR|DOLBY|HLG)/.test(b.t); }).map(function (b) {
+      return { t: b.t === 'DOLBY VISION' ? 'Dolby Vision' : b.t === 'AUDIO NON LETTO' ? 'Audio non letto' : b.t, no: b.no, conv: b.conv };
+    }).concat((function () {
+      var a = null;
+      for (var i = 0; i < info.audio.length; i++) if (info.audio[i].num === (audio !== undefined ? audio : (info.scelta || {}).audio)) a = info.audio[i];
+      var n = a ? (a.tv ? Math.min(6, a.canali || 0) : a.canali || 0) : 0;
+      return n >= 6 ? [{ t: canali(n) }] : [];
+    })());
   }
   function sconosciuto(info) { return info.avvisi.indexOf('sconosciuto') !== -1 || info.avvisi.indexOf('struttura') !== -1; }
   // la traccia audio scelta, se e' un DTS o TrueHD che converte il TV (il servizio: tv-sito/audio-tv.js)
@@ -2442,9 +3168,13 @@
         avvisoLettore('Riprendo da ' + tempo(da) + ' · Giù per ricominciare da capo', 9000);
       }
       clearInterval(salvaTimer);
+      var giri = 0;
       salvaTimer = setInterval(function () {
         if (L !== x) return;
-        if (!v.paused) salvaPunto(false);
+        giri++;
+        // Jellyfin vuole l'avanzamento ogni 10 secondi (passa dalla rete); la memoria dell'app e Continua a guardare della home
+        // (scritture sulla memoria flash del TV) solo ogni minuto, piu' a pausa, salto e uscita
+        if (!v.paused) { if (giri % 6 === 0) salvaPunto(false); else if (x.jf) riportaJf('avanti', v.currentTime - (x.spost || 0)); }
         // in pausa con l'HLS del server: la conversione resta viva (se no Jellyfin la chiude e il film non riparte)
         else if (x.jf && (x.jf.modo === 'copia' || x.jf.modo === 'converti') && x.jf.sessione) chiediJf('Sessions/Playing/Ping', { playSessionId: x.jf.sessione }, {}).then(null, function () {});
       }, 10000);
@@ -2508,6 +3238,20 @@
     salvaPunto(false);
   });
   v.addEventListener('pause', function () { if (L) salvaPunto(false); mostraOsd(true); });
+  // uscire senza passare dal lettore (il tasto verde chiude l'app, il tasto Home, il TV che si spegne): il punto si salva lo
+  // stesso, una volta. Chiusa davvero: anche Jellyfin smette di convertire; solo nascosta: solo il punto
+  function salvaUscendo(chiusa) {
+    var x = L;
+    // (una volta sola: quando il riquadro se ne va arrivano anche pagehide e la pagina nascosta, che non devono rimettere
+    // "in visione" un film appena chiuso)
+    if (!x || schermo !== 'lettore' || x.uscito) return;
+    if (chiusa) x.uscito = true;
+    salvaPunto(true, false, chiusa);
+    if (chiusa && x.jf) fermaConversione(x.jf);
+  }
+  window.addEventListener('hometvchiudi', function () { salvaUscendo(true); });
+  window.addEventListener('pagehide', function () { salvaUscendo(true); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) salvaUscendo(false); });
   v.addEventListener('ended', function () { if (L) finito(); });
   // il diario del lettore (per il giro di prove sul TV): primo fotogramma, fermate, salti, ritmo rispetto al tempo vero,
   // errori. Al servizio vanno solo numeri tecnici (niente titoli ne' percorsi), quando il lettore si chiude
@@ -2587,12 +3331,12 @@
   function nascondiOsdPresto() {
     clearTimeout(osdTimer);
     osdTimer = setTimeout(function () {
-      if (L && !v.paused && $('pannello').hidden && !L.chip && !salto.tot && !L.fineConto) { $('osd').className = ''; posSotto(); }
+      if (L && !v.paused && $('pannello').hidden && !L.chip && !salto.attivo && !L.fineConto) { $('osd').className = ''; posSotto(); }
     }, 4000);
   }
   function disegnaTempo() {
     if (!L) return;
-    var d = (L.info && L.info.durata) || v.duration || 0, t = salto.tot ? anteprima() : v.currentTime;
+    var d = (L.info && L.info.durata) || v.duration || 0, t = salto.attivo ? anteprima() : v.currentTime;
     var f = d ? Math.max(0, Math.min(1, t / d)) : 0;
     $('osd-fatto').style.transform = 'scaleX(' + f + ')';
     var car = 0;
@@ -2602,12 +3346,16 @@
     $('osd-ora').textContent = tempo(t);
     var resta = Math.max(0, d - t) / Math.max(0.25, L.velocita || 1);
     $('osd-resta').textContent = d ? '-' + tempo(d - t) + ' · ' + finisceAlle(resta) : '';
-    anteprimaBarra(salto.tot ? t : -1, f);
+    anteprimaBarra(salto.attivo ? t : -1, f);
     var meta = $('osd-meta');
-    if (salto.tot) {
+    if (salto.attivo) {
+      // il punto dove si va: il minuto grande, poi quanto si salta e il capitolo
+      var cap = capitoloA(t), dt = Math.round(t - v.currentTime);
+      svuota(meta);
+      meta.appendChild(el('b', '', tempo(t)));
+      meta.appendChild(el('small', '', [Math.abs(dt) >= 1 ? (dt > 0 ? '+' : '−') + tempo(Math.abs(dt)) : '', cap && cap.nome ? cap.nome : ''].filter(Boolean).join(' · ')));
       meta.hidden = false;
-      meta.textContent = (salto.tot > 0 ? '+' : '−') + tempo(Math.abs(salto.tot)) + ' · ' + tempo(t);
-      meta.style.left = 'calc(5vw + ' + Math.min(f * 90, 80) + 'vw)';
+      meta.style.left = 'calc(5vw + ' + Math.max(7, Math.min(83, f * 90)) + 'vw)';
     } else meta.hidden = true;
   }
   function disegnaBadgeOsd() {
@@ -2615,7 +3363,7 @@
     svuota(b);
     if (!L || !L.info) return;
     var g = L.jf && L.jf.g, conv = g && g.modo === 'converti' ? g.qualita || {} : null;
-    badgeDi(L.info, L.audio, conv).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.forte ? ' forte' : '') + (x.no ? ' no' : '') + (x.conv ? ' conv' : ''), x.t)); });
+    badgeOsd(L.info, L.audio, conv).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.no ? ' no' : '') + (x.conv ? ' conv' : ''), x.t)); });
   }
   var centroTimer = null;
   function centro(nome) {
@@ -2627,23 +3375,58 @@
     centroTimer = setTimeout(function () { c.className = ''; }, 700);
   }
 
-  // salti: le pressioni vicine si sommano, il salto avviene quando smetti (come il lettore nei siti)
-  var salto = { tot: 0, timer: null };
+  // lo scorrimento: le pressioni vicine si sommano e, tenendo premuto, vanno sempre piu' veloci (10 s a pressione, poi 30 s,
+  // 1 e 2 minuti); sopra la barra l'anteprima del punto (le tessere di Jellyfin o l'immagine del capitolo) col minuto grande.
+  // Il video salta quando lasci: OK, o poco piu' di un secondo fermo. Indietro annulla e si resta dove si era.
+  // Dal telefono: "scorri" mostra il punto mentre il dito trascina la barra, "vai" salta quando lo alza
+  var salto = { tot: 0, timer: null, attivo: false, serie: 0, ultimo: 0, verso: 0, punto: -1 };
   function anteprima() {
     var d = (L.info && L.info.durata) || v.duration || 0;
-    return Math.max(0, Math.min(d ? d - 1 : Infinity, v.currentTime + salto.tot));
+    return Math.max(0, Math.min(d ? d - 1 : Infinity, salto.punto >= 0 ? salto.punto : v.currentTime + salto.tot));
   }
   function salta(sec) {
     if (!L) return;
-    salto.tot += sec;
+    var ora = Date.now(), verso = sec > 0 ? 1 : -1;
+    // si stava scorrendo dal telefono: le frecce partono da quel punto
+    if (salto.punto >= 0) { salto.tot = salto.punto - v.currentTime; salto.punto = -1; }
+    salto.serie = salto.attivo && ora - salto.ultimo < 420 && verso === salto.verso ? salto.serie + 1 : 0;
+    salto.ultimo = ora;
+    salto.verso = verso;
+    salto.tot += sec * (salto.serie < 4 ? 1 : salto.serie < 10 ? 3 : salto.serie < 18 ? 6 : 12);
+    // mai oltre l'inizio o la fine: tornando indietro non c'e' niente da "smaltire"
+    var d = (L.info && L.info.durata) || v.duration || 0;
+    salto.tot = Math.max(-v.currentTime, Math.min((d ? d - 1 : Infinity) - v.currentTime, salto.tot));
+    salto.attivo = true;
     mostraOsd();
     clearTimeout(salto.timer);
-    salto.timer = setTimeout(function () {
-      var t = anteprima();
-      salto.tot = 0;
-      vai(t);
-      mostraOsd();
-    }, 650);
+    salto.timer = setTimeout(confermaSalto, 1100);
+  }
+  function confermaSalto() {
+    clearTimeout(salto.timer);
+    if (!salto.attivo) return;
+    var t = anteprima();
+    fineSalto();
+    vai(t);
+    mostraOsd();
+  }
+  function fineSalto() { clearTimeout(salto.timer); salto.tot = 0; salto.attivo = false; salto.serie = 0; salto.punto = -1; }
+  function annullaSalto() { fineSalto(); disegnaTempo(); }
+  // dal telefono, mentre il dito trascina la barra (sec = il punto sotto il dito): se il dito non si alza piu' (telefono spento),
+  // dopo 5 secondi si torna dov'eri
+  function scorriA(sec) {
+    if (!L || !isFinite(sec)) return;
+    salto.punto = Math.max(0, sec);
+    salto.tot = 0;
+    salto.attivo = true;
+    mostraOsd();
+    clearTimeout(salto.timer);
+    salto.timer = setTimeout(annullaSalto, 5000);
+  }
+  // il capitolo al punto t (per il nome sotto il minuto)
+  function capitoloA(t) {
+    var l = L && L.info && L.info.capitoli || [], c = null;
+    for (var i = 0; i < l.length; i++) if (l[i].t <= t + 0.5) c = l[i];
+    return c;
   }
   function vai(t) {
     if (!L) return;
@@ -2700,7 +3483,7 @@
   function guardaJf(it, o) {
     o = o || {};
     fermaTrailer();
-    apriVideo({ jf: it, nome: String(it.Name || ''), d: '', p: 'jf:' + it.Id, dim: 0 }, { ritorno: o.ritorno || tornaInizio, t: o.t, daCapo: o.daCapo, trailer: o.trailer });
+    apriVideo({ jf: it, nome: String(it.Name || ''), d: '', p: 'jf:' + it.Id, dim: 0 }, { ritorno: o.ritorno || tornaInizio, t: o.t, daCapo: o.daCapo, trailer: o.trailer, daHome: !!o.daHome });
   }
   // lo stesso film (o la stessa puntata) su Jellyfin, per un file della chiavetta che il TV non sente: prima lo stesso file
   // (nome o misura), poi stesso titolo e anno (o stessa serie, stagione e puntata)
@@ -2742,7 +3525,7 @@
       x.voce.nome = String(itp.Name || x.voce.nome);
       if (L === x) $('osd-titolo').textContent = titoloJf(itp);
       var s = JF.scheda(itp);
-      x.jfDa = o.daCapo ? 0 : o.t > 0 ? o.t : riprendibileJf(s) ? s.punto : 0;
+      x.jfDa = o.daCapo ? 0 : o.daHome && riprendibileJf(s) ? s.punto : o.t > 0 ? o.t : riprendibileJf(s) ? s.punto : 0;
       if (j.q === 'auto') return chiedi('jf/veloce').then(function (r) { j.mbps = r.mbps; }, function () { j.q = 'orig'; });
     }).then(function () { return stradaJf(x, x.jfDa); }).then(function (info) {
       if (L !== x || !puoLimitare(x)) return info;
@@ -2989,25 +3772,42 @@
     x.jf.q = q;
     if (q !== 'auto') { ricaricaJf({ testo: 'Qualità: ' + nome }); return; }
     messaggio('Misuro la rete…');
-    chiedi('jf/veloce').then(function (r) {
+    // scelta a mano: una misura nuova (per i film il servizio tiene l'ultima per 20 minuti)
+    chiedi('jf/veloce', { nuova: 1 }).then(function (r) {
       if (L !== x) return;
       x.jf.mbps = r.mbps;
       ricaricaJf({ testo: 'Qualità automatica: la rete fa ' + r.mbps + ' Mbps' });
     }, function () { messaggio('Non riesco a misurare la rete: resto sull\'originale', 4000); x.jf.q = 'orig'; });
   }
-  // l'anteprima sopra la barra mentre si salta (le tessere di Jellyfin: un foglio alla volta, ridotto con un transform)
+  // l'anteprima grande sopra la barra mentre si scorre: le tessere di Jellyfin (trickplay); senza, l'immagine del capitolo se c'e'
+  // (Jellyfin). Dalle chiavette niente immagini (estrarle peserebbe sul TV): resta il minuto grande col nome del capitolo
   function anteprimaBarra(t, f) {
-    var an = $('osd-anteprima'), tp = L && L.jf ? L.jf.tp : null;
-    if (t < 0 || !tp) { if (!an.hidden) an.hidden = true; return; }
-    var ts = JF.tessera(tp, t), h = window.innerHeight * 0.135, sc = h / ts.h, w = Math.round(ts.w * sc), te = $('osd-tessera');
-    var url = serv.base + '/api/video/g/' + serv.gettone + '/jf/p/Videos/' + L.jf.id + '/Trickplay/' + tp.larg + '/' + ts.foglio + '.jpg?MediaSourceId=' + L.jf.ms;
-    if (te.getAttribute('data-u') !== url) { te.style.backgroundImage = 'url(' + url + ')'; te.setAttribute('data-u', url); }
-    te.style.width = ts.W + 'px';
-    te.style.height = ts.H + 'px';
-    te.style.transform = 'scale(' + sc + ') translate(' + (-ts.x) + 'px,' + (-ts.y) + 'px)';
+    var an = $('osd-anteprima'), tp = L && L.jf ? L.jf.tp : null, te = $('osd-tessera'), ci = $('osd-capitolo');
+    var cap = t >= 0 && !tp ? capitoloA(t) : null, img = cap && cap.img && serv.gettone ? cap.img : null;
+    if (t < 0 || (!tp && !img)) { if (!an.hidden) an.hidden = true; return; }
+    var W = window.innerWidth, h = Math.round(window.innerHeight * 0.24), w;
+    if (tp) {
+      var ts = JF.tessera(tp, t), sc = h / ts.h;
+      var url = serv.base + '/api/video/g/' + serv.gettone + '/jf/p/Videos/' + L.jf.id + '/Trickplay/' + tp.larg + '/' + ts.foglio + '.jpg?MediaSourceId=' + L.jf.ms;
+      w = Math.round(ts.w * sc);
+      if (te.getAttribute('data-u') !== url) { te.style.backgroundImage = 'url(' + url + ')'; te.setAttribute('data-u', url); }
+      te.style.width = ts.W + 'px';
+      te.style.height = ts.H + 'px';
+      te.style.transform = 'scale(' + sc + ') translate(' + (-ts.x) + 'px,' + (-ts.y) + 'px)';
+      te.hidden = false;
+      ci.hidden = true;
+    } else {
+      var u2 = urlImmagine('', img, 480, 270, false);
+      w = Math.round(h * 16 / 9);
+      if (ci.getAttribute('src') !== u2) ci.src = u2;
+      ci.hidden = false;
+      te.hidden = true;
+    }
     an.style.width = w + 'px';
-    an.style.marginLeft = (-Math.round(w / 2)) + 'px';
-    an.style.left = 'calc(5vw + ' + Math.max(6, Math.min(84, f * 90)) + 'vw)';
+    an.style.height = h + 'px';
+    // il centro sul punto della barra, ma sempre tutta dentro lo schermo
+    an.style.left = Math.round(Math.max(w / 2 + W * 0.03, Math.min(W - w / 2 - W * 0.03, W * 0.05 + f * W * 0.9)) - w / 2) + 'px';
+    an.style.marginLeft = '0';
     an.hidden = false;
   }
 
@@ -3530,8 +4330,7 @@
   // niente resti del video di prima: pulsanti, avvisi, sottotitoli, salto in corso
   function pulisciLettore() {
     clearTimeout(contoTimer);
-    clearTimeout(salto.timer);
-    salto.tot = 0;
+    fineSalto();
     svuota($('osd-chip'));
     $('avviso-lettore').hidden = true;
     $('osd-meta').hidden = true;
@@ -3558,7 +4357,13 @@
     $('osd').className = '';
     attesa(false);
     var r = x ? x.ritorno : 'inizio';
-    if (x && x.jf) { fermaConversione(x.jf); jf.caricato = 0; }
+    if (x && x.jf) {
+      fermaConversione(x.jf);
+      jf.caricato = 0;
+      // la barra e il segno di visto anche nelle file tenute 10 minuti (collezioni, Film, Serie)
+      aggiornaVoceLenti(x.jf.id);
+      if (x.jf.it && x.jf.it.SeriesId) aggiornaVoceLenti(x.jf.it.SeriesId);
+    }
     if (typeof r === 'function') { r(); return; }
     if (r === 'esci') { HomeTV.esci(); apriInizio(); return; }
     if (r === 'scheda' && sch) { tornaAllaScheda(); return; }
@@ -3576,7 +4381,7 @@
     }
     if (L.chip) { tastoChip(a); return true; }
     switch (a) {
-      case 'ok': if (!saltaSigla()) playPausa(); return true;
+      case 'ok': if (salto.attivo) confermaSalto(); else if (!saltaSigla()) playPausa(); return true;
       case 'play': playPausa(); return true;
       case 'left': salta(-10); return true;
       case 'right': salta(10); return true;
@@ -3595,6 +4400,7 @@
   }
   HomeTV.tasti(function (a) {
     if (fermoAperto()) return false; // i pulsanti del messaggio: la navigazione di serie
+    if (schermo === 'inizio') vetrinaTimer(); // il banner non cambia mentre ci si muove
     if (schermo === 'lettore') return L ? tastoLettore(a) : true;
     if (schermo === 'libreria') return tastoLibreria(a);
     if (schermo === 'scheda' && a === 'play') { if (sch && sch.guarda) sch.guarda(); return true; }
@@ -3605,15 +4411,16 @@
   if (HomeTV.video) HomeTV.video(function (c) {
     if (!L) return;
     if (c.azione === 'play' || c.azione === 'pausa') playPausa(c.azione);
+    else if (c.azione === 'scorri') scorriA(+c.secondi);
     else if (c.azione === 'salta') salta(c.secondi);
-    else if (c.azione === 'vai') { vai(Math.max(0, Math.min(((L.info && L.info.durata) || v.duration || Infinity) - 1, c.secondi))); mostraOsd(); }
+    else if (c.azione === 'vai') { fineSalto(); vai(Math.max(0, Math.min(((L.info && L.info.durata) || v.duration || Infinity) - 1, c.secondi))); mostraOsd(); }
   });
   HomeTV.indietro(function () {
     if (fermoAperto()) { var ultimo = fermoAzioni[fermoAzioni.length - 1]; if (ultimo) ultimo.fn(); else chiudiFermo(); return true; }
     if (schermo === 'lettore') {
       if (pan) { chiudiPannello(); return true; }
       if (L && L.chip) { if (L.fineConto) L.fineConto = 0; chiudiChip(); return true; }
-      if (salto.tot) { clearTimeout(salto.timer); salto.tot = 0; disegnaTempo(); return true; }
+      if (salto.attivo) { annullaSalto(); return true; }
       chiudiLettore();
       return true;
     }
@@ -3621,6 +4428,11 @@
     if (schermo === 'libreria') { lib.giro++; if (lib.jf) lib.indietro(); else indietroLibreria(); return true; }
     if (schermo === 'cerca') { cerca.giro++; (cerca.indietro || tornaInizio)(); return true; }
     if (schermo === 'collega') { coll.giro++; clearTimeout(coll.timer); (coll.indietro || tornaInizio)(); return true; }
+    if (schermo === 'inizio') {
+      // il binario aperto si chiude; giu' nelle file della vetrina si torna in cima; dal banner si esce dall'app
+      if (bin.aperto) { chiudiBinario(); return true; }
+      if (pag && pag.disponi && pag.r > 0) { pag.r = 0; evidenzia(); return true; }
+    }
     return false; // dall'inizio: si esce dall'app
   });
   // la pagina non scorre mai da sola (tutto si muove con transform)
@@ -3641,6 +4453,7 @@
   HomeTV.pronto(function () {
     leggiMemoria();
     orologio();
+    setTimeout(function () { attesaFinita = true; if (schermo === 'inizio') $('inizio-corpo').style.visibility = ''; }, 1500);
     // aperta da Continua a guardare della home: #/v/<percorso>?d=&dim= (chiavetta e dimensione), piu' t=<secondi> (il
     // punto della scheda) o dacapo=1; con Indietro si torna alla home
     var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash), mj = /#\/jf\/([0-9a-f]{32})(?:\?(.*))?$/.exec(location.hash);
@@ -3650,13 +4463,13 @@
       caricaTetto();
       // Jellyfin: lo stato (server, utente, i codec del TV) e le file dell'inizio; dalla home un film di Jellyfin riparte subito
       jfCaricaStato(function () {
-        jfCaricaInizio(true);
+        jfCaricaInizio('tutto');
         disegnaInizio('tieni');
         if (!mj) return;
         var q = {}, coppie = String(mj[2] || '').split('&');
         for (var i = 0; i < coppie.length; i++) { var kv = coppie[i].split('='); if (kv[0]) q[kv[0]] = decodeURIComponent(kv[1] || ''); }
         if (!jfAttivo()) { messaggio('Collega Jellyfin per riprendere questo film (Altro › Collega Jellyfin)', 6000); return; }
-        guardaJf({ Id: mj[1], Name: '' }, { ritorno: 'esci', daCapo: q.dacapo === '1', t: q.t !== undefined && isFinite(+q.t) ? +q.t : undefined });
+        guardaJf({ Id: mj[1], Name: '' }, { ritorno: 'esci', daCapo: q.dacapo === '1', t: q.t !== undefined && isFinite(+q.t) ? +q.t : undefined, daHome: true });
       });
       if (m) {
         var q = {}, coppie = m[2].split('&');

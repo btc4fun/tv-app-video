@@ -163,6 +163,54 @@ var JF = (function () {
     if (a.length && !a.some(function (x) { return letti.audio[famiglia(x.Codec)] === true; })) return 'audio';
     return 'diretta';
   }
+  // il nome del video: HEVC, H.264 (con "10 bit" se lo e': il TV non lo legge), AV1...
+  function nomeVideo(v) {
+    var f = famiglia(v && v.Codec);
+    return (NOMI_VIDEO[f] || String((v && v.Codec) || '').toUpperCase()) + (+(v && v.BitDepth) > 8 && f === 'AVC' ? ' 10 bit' : '');
+  }
+  // le etichette semplici della scheda (come nei servizi di streaming): 4K, HD o SD, l'HDR, i canali dell'audio, i sottotitoli.
+  // I nomi dei codec e i Mbps stanno nelle informazioni, in fondo alla scheda
+  function etichette(it) {
+    var ms = sorgente(it), out = [];
+    if (!ms) return out;
+    var v = flussi(ms, 'Video')[0], a = flussi(ms, 'Audio'), s = flussi(ms, 'Subtitle'), mx = 0, atmos = false;
+    if (v) {
+      var w = +v.Width || 0, h = +v.Height || 0, rng = String(v.VideoRangeType || v.VideoRange || '');
+      out.push(w >= 3200 || h >= 2000 ? '4K' : w >= 1260 || h >= 700 ? 'HD' : 'SD');
+      if (/DOVI/i.test(rng)) out.push('Dolby Vision');
+      else if (/HDR10Plus/i.test(rng)) out.push('HDR10+');
+      else if (/HDR10|HDR|PQ/i.test(rng)) out.push('HDR10');
+      else if (/HLG/i.test(rng)) out.push('HLG');
+    }
+    a.forEach(function (x) { mx = Math.max(mx, +x.Channels || 0); if (/atmos/i.test(String(x.DisplayTitle || '') + String(x.Profile || ''))) atmos = true; });
+    if (atmos) out.push('Atmos');
+    else if (mx >= 6) out.push(canali(mx));
+    if (s.length) out.push('Sottotitoli');
+    return out;
+  }
+  // le collezioni (il contratto con l'app del Mac, mac/home-tv-film/LEGGIMI.md): quelle fatte sul Mac hanno un numero davanti al
+  // nome per ordinare ("01 MCU", che Jellyfin salva come "0000000001 mcu") e vengono prima, nel loro ordine; le automatiche di
+  // TheMovieDb (ProviderIds.Tmdb o TmdbCollection) dopo, per nome; quelle col tag "hometv-nascosta" non si mostrano. Senza
+  // ProviderIds (Jellyfin vecchi) un numero che e' anche l'inizio del nome vero ("300 - Collezione") non conta
+  function automatica(it) { var p = (it && it.ProviderIds) || {}; return !!(p.Tmdb || p.TmdbCollection); }
+  function nascosta(it) { return ((it && it.Tags) || []).indexOf('hometv-nascosta') !== -1; }
+  function numeroCollezione(it) {
+    if (!it || automatica(it)) return -1;
+    var m = /^\s*(\d{1,10})[\s._-]/.exec(String(it.SortName || it.ForcedSortName || ''));
+    if (!m) return -1;
+    var n = +m[1];
+    if (String(it.Name || '').replace(/^\s+/, '').indexOf(String(n)) === 0) return -1;
+    return n;
+  }
+  function ordinaCollezioni(l) {
+    return (l || []).filter(function (it) { return it && !nascosta(it); }).map(function (it, i) {
+      return { it: it, n: numeroCollezione(it), nome: String(it.Name || '').toLowerCase(), i: i };
+    }).sort(function (a, b) {
+      if (a.n >= 0 && b.n >= 0 && a.n !== b.n) return a.n - b.n;
+      if ((a.n >= 0) !== (b.n >= 0)) return a.n >= 0 ? -1 : 1;
+      return a.nome < b.nome ? -1 : a.nome > b.nome ? 1 : a.i - b.i;
+    }).map(function (x) { return x.it; });
+  }
   // i capitoli dell'app (con l'immagine di Jellyfin, se c'e')
   function capitoli(it) {
     return (it && it.Chapters || []).map(function (c, k) {
@@ -174,6 +222,6 @@ var JF = (function () {
   var IMMAGINI = 'EnableImageTypes=Primary,Backdrop,Thumb,Logo&ImageTypeLimit=1&EnableUserData=true';
 
   return { TICK: TICK, sec: sec, ticks: ticks, ref: ref, percorsoImmagine: percorsoImmagine, scheda: scheda, trickplay: trickplay,
-    tessera: tessera, segmenti: segmenti, badge: badge, strada: strada, videoOk: videoOk, capitoli: capitoli, famiglia: famiglia, nomeAudio: nomeAudio,
+    tessera: tessera, segmenti: segmenti, badge: badge, etichette: etichette, nomeVideo: nomeVideo, ordinaCollezioni: ordinaCollezioni, strada: strada, videoOk: videoOk, capitoli: capitoli, famiglia: famiglia, nomeAudio: nomeAudio,
     sorgente: sorgente, flussi: flussi, CAMPI: CAMPI, IMMAGINI: IMMAGINI };
 })();

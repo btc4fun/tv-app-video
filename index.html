@@ -9,35 +9,55 @@
 <link rel="stylesheet" href="stile.css">
 </head>
 <body>
-  <!-- lo sfondo: due strati che si danno il cambio (la copertina sfocata della voce scelta, o il fanart nitido della scheda) -->
-  <!-- dietro la scheda, dopo qualche secondo: il trailer (o il film) senza audio; si spegne nelle impostazioni -->
-  <div id="sfondo"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><video id="trailer" muted playsinline preload="none" hidden></video><div id="sfondo-velo"></div></div>
+  <!-- lo sfondo: due strati che si danno il cambio (l'immagine del film scelto), sopra un velo solo (sfumature e grana).
+       Dietro la scheda, dopo qualche secondo: il trailer (o il film) senza audio; si spegne in Altro -->
+  <div id="sfondo" class="piatto"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><video id="trailer" muted playsinline preload="none" hidden></video><div id="velo"></div></div>
 
-  <!-- inizio: il film da riprendere in grande, Continua a guardare, chiavette e dischi -->
+  <!-- inizio: il binario a sinistra, il film in evidenza (banner), poi le file: Continua a guardare, La mia lista, Aggiunti di
+       recente, una fila per ogni collezione, Film, Serie, Chiavette USB, Altro. Senza Jellyfin: "Guarda i film del tuo Mac" -->
   <div id="schermo-inizio" class="schermo">
-    <div class="testata"><div class="marchio">Video</div><div class="ora" id="ora"></div></div>
-    <div id="inizio-corpo" class="corpo">
-      <section id="eroe" hidden>
+    <nav id="binario"><div id="binario-fondo"></div><div id="binario-voci"></div></nav>
+    <div class="testata"><div class="marchio">Real<b>4K</b></div><div class="ora" id="ora"></div></div>
+    <section id="eroe" hidden>
+      <div class="dentro" id="eroe-dentro">
+        <div id="eroe-sopra"></div>
         <div id="eroe-logo" class="logo"></div>
         <div id="eroe-meta" class="meta"></div>
         <p id="eroe-trama" class="trama"></p>
-        <div id="eroe-pulsanti" class="pulsanti"></div>
+      </div>
+      <div id="eroe-pulsanti" class="pulsanti"></div>
+      <div id="eroe-punti"></div>
+    </section>
+    <div id="inizio-corpo" class="corpo">
+      <section id="benvenuto" hidden>
+        <svg class="disegno ic" viewBox="0 0 340 200" aria-hidden="true">
+          <rect x="18" y="52" width="124" height="78" rx="7"/><path d="M6 140h148l-8 8H14z"/><path d="M72 80v22l18-11z"/>
+          <rect x="196" y="34" width="132" height="82" rx="6"/><path d="M262 116v14M240 132h44"/>
+          <rect x="210" y="56" width="22" height="33" rx="2"/><rect x="240" y="56" width="22" height="33" rx="2"/><rect x="270" y="56" width="22" height="33" rx="2"/><rect x="300" y="56" width="14" height="33" rx="2"/>
+          <path class="oro" d="M146 70c16-34 34-38 46-14" stroke-dasharray="1 7"/><circle class="oro" cx="146" cy="70" r="2.5"/><circle class="oro" cx="192" cy="56" r="2.5"/>
+        </svg>
+        <h1 id="benv-titolo">Guarda i film del tuo Mac</h1>
+        <p id="benv-testo"></p>
+        <div id="benv-codice" hidden></div>
+        <div id="benv-stato"></div>
+        <div id="benv-nota"></div>
+        <div class="pulsanti" id="benv-pulsanti"></div>
       </section>
-      <section class="sezione" id="sez-continua" hidden><h2>Continua a guardare</h2><div class="fila" id="fila-continua"></div></section>
-      <!-- Jellyfin: prossimi episodi, aggiunti di recente, librerie, generi, collezioni, preferiti (fatte dall'app) -->
-      <div id="jf-righe"></div>
-      <section class="sezione" id="sez-dischi" hidden><h2>Chiavette e dischi</h2><div class="fila" id="fila-dischi"></div></section>
       <section id="vuoto" hidden>
-        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 4h12v8h4v26a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6V12h4zm4 4v4h4V8zm-6 8v22a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V16z"/></svg>
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
         <h2 id="vuoto-titolo">Attacca una chiavetta o un disco USB</h2>
         <p id="vuoto-testo">Appena il TV lo vede, i tuoi video compaiono qui.</p>
         <div class="pulsante" id="vuoto-riprova" data-tv>Controlla di nuovo</div>
       </section>
+      <section class="sezione" id="sez-continua" hidden><h2>Continua a guardare</h2><div class="fila" id="fila-continua"></div></section>
+      <!-- Jellyfin: La mia lista, Aggiunti di recente, le collezioni (nell'ordine del Mac), Film, Serie (fatte dall'app) -->
+      <div id="jf-righe"></div>
+      <section class="sezione" id="sez-dischi" hidden><h2>Chiavette USB</h2><div class="fila" id="fila-dischi"></div></section>
       <section class="sezione" id="sez-altro"><h2>Altro</h2><div class="fila" id="fila-altro"></div></section>
     </div>
   </div>
 
-  <!-- una cartella: le copertine in griglia, in alto la voce scelta -->
+  <!-- una cartella o una libreria: le copertine in griglia, in alto la voce scelta -->
   <div id="schermo-libreria" class="schermo" hidden>
     <div id="lib-testa"><div id="briciole"></div><div id="lib-conta"></div></div>
     <div id="lib-barra" hidden></div>
@@ -61,13 +81,15 @@
         <p id="sc-slogan"></p>
         <p id="sc-trama" class="trama"></p>
         <div id="sc-pulsanti" class="pulsanti"></div>
-        <div id="sc-righe"></div>
+        <div id="sc-resta" class="resta" hidden></div>
         <div id="sc-avviso" hidden></div>
       </section>
       <section class="sezione" id="sez-stagioni" hidden><h2>Stagioni</h2><div class="fila" id="fila-stagioni"></div></section>
       <section class="sezione" id="sez-puntate" hidden><h2 id="puntate-titolo">Puntate</h2><div class="fila" id="fila-puntate"></div></section>
+      <section class="sezione" id="sez-collezione" hidden><h2 id="collezione-titolo">Altri della collezione</h2><div class="fila" id="fila-collezione"></div></section>
       <section class="sezione" id="sez-cast" hidden><h2>Cast</h2><div class="fila" id="fila-cast"></div></section>
       <section class="sezione" id="sez-simili" hidden><h2>Più come questo</h2><div class="fila" id="fila-simili"></div></section>
+      <section class="sezione" id="sez-info" hidden><h2>Informazioni</h2><div class="fila" id="fila-info"><div class="carta info" data-tv><div class="quadro"><div id="sc-righe"></div></div></div></div></section>
     </div>
   </div>
 
@@ -83,8 +105,9 @@
     </div>
   </div>
 
-  <!-- collegare Jellyfin: il server nella rete di casa, poi il codice da confermare dal telefono -->
+  <!-- collegare Jellyfin: il server nella rete di casa, poi il codice da scrivere sul Mac (o da confermare dal telefono) -->
   <div id="schermo-collega" class="schermo" hidden>
+    <div class="testata"><div class="marchio">Real<b>4K</b></div></div>
     <div id="collega-corpo" class="corpo">
       <section id="collega-sopra">
         <div id="collega-titolo"></div>
@@ -108,7 +131,7 @@
       <div id="osd-aiuto">OK pausa &middot; &#9664; &#9654; 10 s &middot; Gi&ugrave; audio e sottotitoli</div>
       <div id="osd-chip"></div>
       <div id="avviso-lettore" hidden></div>
-      <div id="osd-anteprima" hidden><div id="osd-tessera"></div></div>
+      <div id="osd-anteprima" hidden><div id="osd-tessera"></div><img id="osd-capitolo" alt="" hidden></div>
       <div id="osd-barra"><div id="osd-car"></div><div id="osd-fatto"></div></div>
       <div id="osd-testa"></div>
       <div id="osd-meta" hidden></div>
@@ -121,7 +144,7 @@
     <div id="attesa" hidden></div>
   </div>
 
-  <div id="fermo" hidden><h2 id="fermo-titolo"></h2><p id="fermo-testo"></p><div id="fermo-pulsanti"></div></div>
+  <div id="fermo" hidden><div id="fermo-carta"><h2 id="fermo-titolo"></h2><p id="fermo-testo"></p><div id="fermo-pulsanti"></div></div></div>
   <div id="messaggio"></div>
 
   <script src="pgs.js"></script>
