@@ -131,9 +131,11 @@
     if (permessoInCorso) return permessoInCorso;
     var p = window.HomeTV && typeof HomeTV.permesso === 'function' ? HomeTV.permesso('video') : Promise.resolve(null);
     permessoInCorso = p.then(function (x) {
-      // fuori da Home TV (sul computer, per provare l'app): #servizio=...&gettone=... con un gettone vero del servizio.
-      // Dentro Home TV un no arriva come errore e l'indirizzo non conta
-      if (!x && (!window.HomeTV || !HomeTV.info || HomeTV.info().piattaforma === 'browser')) {
+      // fuori da Home TV (sul computer, per provare l'app servita dal computer stesso, come test_video_jellyfin.py):
+      // #servizio=...&gettone=... con un gettone vero del servizio. Dentro Home TV mai: nel riquadro un no arriva come
+      // errore, e a pagina intera sul TV l'app sta sul sito della home, dove l'indirizzo lo puo' scrivere qualsiasi sito
+      if (!x && (!window.HomeTV || !HomeTV.info || HomeTV.info().piattaforma === 'browser') && window.parent === window &&
+        /^(127\.0\.0\.1|localhost)$/.test(location.hostname)) {
         var m = /[#&]servizio=([^&]+)&gettone=([0-9a-f]{64})/.exec(location.hash);
         if (m) x = { servizio: decodeURIComponent(m[1]), gettone: m[2] };
       }
@@ -172,7 +174,7 @@
     }).then(null, function (e) {
       if (e.codice === 'gettone' && !riprovato) { serv.gettone = ''; return chiedi(via, param, corpo, true, metodo); }
       // Jellyfin non riconosce piu' l'accesso (password cambiata, accesso tolto): si torna a collegarlo
-      if (e.codice === 'accesso' && jf.stato && jf.stato.utente) { jf.stato.utente = null; jf.dati = null; }
+      if (e.codice === 'accesso' && via.indexOf('mac/') !== 0 && jf.stato && jf.stato.utente) { jf.stato.utente = null; jf.dati = null; }
       throw e;
     });
   }
@@ -897,21 +899,162 @@
       disegnaInizio('tieni');
     });
   }
-  // il tetto: 80 (finche' non si prova sul TV), 150, o misurato dal TV col video a scalini del Mac
+  // il tetto: 150 sui TV dal 2020 (80 sui 2017-2019), 80, o misurato dal TV col video a scalini del Mac ("Prova da solo")
   function apriTetto() {
-    var indietro = function () { chiudiFermo(); disegnaInizio('tieni'); };
+    var indietro = function () { chiudiFermo(); disegnaInizio('tieni'); }, m = tettoTv.misura;
     function scegli(corpo, detto) {
       chiedi('tv/tetto', null, corpo).then(function (r) { tettoTv = r; chiudiFermo(); messaggio(detto(r)); apriTetto(); },
         function () { messaggio('Non riesco a salvare: riprova'); });
     }
-    var prossima = tettoTv.unione === 10 ? 30 : tettoTv.unione === 30 ? 60 : 10;
-    fermo('Tetto del TV · ' + tettoTv.mbps + ' Mbps', 'Quanti Mbps il TV regge senza scatti. Sopra il tetto l\'app avvisa (chiavetta) e il Mac toglie i picchi ' +
-      '(Jellyfin). Finché non lo proviamo sul tuo TV, 80 è la scelta sicura.\nGiunture: il Mac unisce i tratti da rifare vicini meno di ' + tettoTv.unione +
-      ' s. Se il TV scatta dove il Mac ha rifatto un pezzo, unisci di più: meno giunture.', [
-      { testo: '80 Mbps' + (tettoTv.scelta === '80' ? ' ✓' : ''), fn: function () { scegli({ scelta: '80' }, function (r) { return 'Tetto del TV: ' + r.mbps + ' Mbps'; }); } },
-      { testo: '150 Mbps' + (tettoTv.scelta === '150' ? ' ✓' : ''), fn: function () { scegli({ scelta: '150' }, function (r) { return 'Tetto del TV: ' + r.mbps + ' Mbps'; }); } },
+    function detto(r) { return 'Tetto del TV: ' + r.mbps + ' Mbps'; }
+    var prossima = tettoTv.unione === 10 ? 30 : tettoTv.unione === 30 ? 60 : 10, misurato = m && m.mbps >= 10 ? m.mbps : tettoTv.prova ? tettoTv.prova.mbps : 0;
+    var pulsanti = [{ testo: '80 Mbps' + (tettoTv.scelta === '80' ? ' ✓' : ''), fn: function () { scegli({ scelta: '80' }, detto); } },
+      { testo: '150 Mbps' + (tettoTv.scelta === '150' ? ' ✓' : ''), fn: function () { scegli({ scelta: '150' }, detto); } }];
+    if (misurato) pulsanti.push({ testo: 'Misurato: ' + misurato + ' Mbps' + (tettoTv.scelta === 'prova' && tettoTv.mbps === misurato ? ' ✓' : ''),
+      fn: function () { scegli({ scelta: 'prova', mbps: misurato }, detto); } });
+    pulsanti.push({ testo: 'Prova da solo', fn: provaTetto },
       { testo: 'Giunture: ' + tettoTv.unione + ' s', fn: function () { scegli({ unione: prossima }, function (r) { return 'Giunture: il Mac unisce i tratti vicini meno di ' + r.unione + ' s'; }); } },
-      { testo: 'Indietro', fn: indietro }]);
+      { testo: 'Indietro', fn: indietro });
+    fermo('Tetto del TV · ' + tettoTv.mbps + ' Mbps', 'Quanti Mbps il TV regge senza scatti. Sopra il tetto l\'app avvisa (chiavetta) e il Mac toglie i picchi ' +
+      '(Jellyfin). «Prova da solo» lo misura: il TV guarda il video a scalini del Mac, fino a 300 Mbps, e tiene l\'ultimo scalino senza scatti.\n' +
+      'Giunture: il Mac unisce i tratti da rifare vicini meno di ' + tettoTv.unione + ' s. Se il TV scatta dove il Mac ha rifatto un pezzo, unisci di più: meno giunture.', pulsanti);
+  }
+  // la prova del tetto fatta dal TV: il video a scalini del Mac (4K HEVC Main 10, 10 s per scalino), guardato dal ponte come i film
+  // del limitatore. Il TV non dice i fotogrammi persi: per ogni scalino contano le fermate e il tempo vero rispetto a quello del video
+  var provaStato = { giro: 0, v: null, cane: 0 };
+  function chiudiProva() {
+    provaStato.giro++;
+    clearInterval(provaStato.cane);
+    $('fermo').className = '';
+    var pv = provaStato.v;
+    provaStato.v = null;
+    if (pv) {
+      pv.removeAttribute('src');
+      try { pv.load(); } catch (e) {}
+      if (pv.parentNode) pv.parentNode.removeChild(pv);
+    }
+  }
+  function provaTetto() {
+    chiudiProva();
+    var giro = provaStato.giro;
+    function vivo() { return giro === provaStato.giro; }
+    function annulla() { chiudiProva(); apriTetto(); }
+    function male(e) {
+      if (!vivo()) return;
+      var c = e && e.codice;
+      fermo('Prova del tetto', c === 'accesso' ? 'Il Mac non riconosce più questo TV: ricollegalo (Altro › Senza picchi · Mac).' :
+        c === 'spazio' ? 'Sul Mac manca lo spazio per il video di prova (circa 1,5 GB).' : c === 'lista' ? 'Il servizio di questo TV è vecchio: riavvia il TV.' :
+        'Il Mac non risponde: controlla che il limitatore sia acceso.', [{ testo: 'Indietro', fn: annulla }]);
+    }
+    function aspetta(id) {
+      chiedi('mac/p/lavori/' + id).then(function (r) {
+        if (!vivo()) return;
+        var l = r && r.lavoro || {};
+        if (l.stato === 'fatto') {
+          chiedi('mac/p/prova-tetto').then(function (r2) { if (!vivo()) return; if (r2 && r2.prova) guardaProva(r2.prova, vivo, annulla); else male(null); }, male);
+          return;
+        }
+        if (l.stato === 'errore' || l.stato === 'fermato') { male({ codice: l.codice }); return; }
+        $('fermo-testo').textContent = 'Il Mac prepara il video di prova: si fa una volta sola, circa 3 minuti… ' +
+          Math.round(+(l.avanzamento && l.avanzamento.percentuale) || 0) + '%';
+        setTimeout(function () { if (vivo()) aspetta(id); }, 2000);
+      }, male);
+    }
+    if (!macAttivo()) { fermo('Prova del tetto', 'Serve il limitatore del Mac: collegalo da Altro › Senza picchi · Mac.', [{ testo: 'Indietro', fn: apriTetto }]); return; }
+    fermaTrailer();
+    fermo('Prova del tetto', 'Chiedo al Mac il video di prova…', [{ testo: 'Annulla', fn: annulla }]);
+    chiedi('mac/p/prova-tetto', null, {}, false, 'POST').then(function (r) {
+      if (!vivo()) return;
+      if (r && r.pronto && r.prova) guardaProva(r.prova, vivo, annulla);
+      else if (r && r.lavoro && /^prova-[0-9]{1,9}$/.test(String(r.lavoro.id))) aspetta(r.lavoro.id);
+      else male(null);
+    }, male);
+  }
+  function guardaProva(pr, vivo, annulla) {
+    var sc = (Array.isArray(pr.scalini) ? pr.scalini : []).filter(function (s) { return s && +s.da >= 0 && +s.a > +s.da; }).slice(0, 10);
+    if (!sc.length) { fermo('Prova del tetto', 'Il video di prova del Mac non ha scalini: riprova.', [{ testo: 'Indietro', fn: annulla }]); return; }
+    var via = /^\/prova-tetto\/(index\.m3u8|p[0-9]{3,6}_[0-9]{5,9}\.ts)$/.test(String(pr.playlist || '')) ? pr.playlist : '/prova-tetto/index.m3u8';
+    var es = sc.map(function (s) { return { mbps: +s.mbps || +s.richiesti || 0, da: +s.da, a: +s.a, fermate: 0, msFermo: 0, t0: -1, t1: -1 }; });
+    var pv = el('video'), durata = es[es.length - 1].a, partito = false, finito = false, tFermo = 0, kFermo = -1, k0 = -1;
+    var ultimoT = -1, fermoDa = Date.now(), inizio = Date.now();
+    function scalino(t) { for (var i = 0; i < es.length; i++) if (t >= es[i].da && t < es[i].a) return i; return -1; }
+    // quando il video passa un confine (inizio o fine di uno scalino): l'ora vera di quel punto, ricavata da dove si e' adesso
+    function segna() {
+      var t = pv.currentTime || 0, ora = Date.now();
+      for (var i = 0; i < es.length; i++) {
+        if (es[i].t0 < 0 && t >= es[i].da) es[i].t0 = ora - (t - es[i].da) * 1000;
+        if (es[i].t1 < 0 && t >= es[i].a) es[i].t1 = ora - (t - es[i].a) * 1000;
+      }
+      var k = scalino(t);
+      if (k >= 0 && k !== k0) { k0 = k; $('fermo-titolo').textContent = 'Prova del tetto · ' + Math.round(es[k].mbps) + ' Mbps (' + (k + 1) + ' di ' + es.length + ')'; }
+    }
+    function decimi(ms) { return String(Math.round(ms / 100) / 10).replace('.', ','); }
+    function usa(corpo) {
+      chiedi('tv/tetto', null, corpo).then(function (r) { tettoTv = r; messaggio('Tetto del TV: ' + r.mbps + ' Mbps'); apriTetto(); },
+        function () { messaggio('Non riesco a salvare: riprova'); });
+    }
+    function fine(motivo, codice) {
+      if (finito) return;
+      finito = true;
+      segna();
+      var ora = Date.now(), ultimo = es[es.length - 1], i;
+      // la fine del video arriva un soffio prima dell'ultimo confine
+      if (motivo === 'fine' && ultimo.t0 >= 0 && ultimo.t1 < 0) ultimo.t1 = ora - ((pv.currentTime || ultimo.a) - ultimo.a) * 1000;
+      if (tFermo && kFermo >= 0) es[kFermo].msFermo += ora - tFermo;
+      chiudiProva();
+      if (es[0].t0 < 0) {
+        fermo('Prova del tetto', motivo === 'errore' ? 'Il TV non riesce a leggere il video di prova (errore ' + codice + ').' :
+          'Il video di prova non parte: controlla che il Mac sia acceso e riprova.', [{ testo: 'Riprova', fn: provaTetto }, { testo: 'Indietro', fn: apriTetto }]);
+        return;
+      }
+      var buono = 0, righe = [], dati = [];
+      for (i = 0; i < es.length; i++) {
+        var e = es[i], sec = e.a - e.da, ms = e.t0 >= 0 && e.t1 >= 0 ? Math.round(e.t1 - e.t0) : -1;
+        e.liscio = ms >= 0 && !e.fermate && ms <= sec * 1000 + 600;
+        righe.push(Math.round(e.mbps) + ' Mbps: ' + (ms < 0 ? 'non arrivato' : e.liscio ? 'liscio' : e.fermate ?
+          e.fermate + (e.fermate === 1 ? ' fermata, ' : ' fermate, ') + decimi(e.msFermo) + ' s da fermo' : 'in ritardo di ' + decimi(ms - sec * 1000) + ' s'));
+        dati.push({ mbps: e.mbps, fermate: e.fermate, msFermo: Math.round(e.msFermo), ms: Math.max(0, ms), secondi: sec });
+      }
+      for (i = 0; i < es.length && es[i].liscio; i++) buono = Math.floor(es[i].mbps);
+      // la misura resta nel servizio anche se non la si sceglie (chi prova il TV la legge dal Mac)
+      chiedi('tv/tetto', null, { misura: { mbps: buono, scalini: dati, motivo: motivo, errore: codice || 0 } }).then(function (r) { tettoTv.misura = r.misura; }, function () {});
+      if (buono >= 10) fermo('Prova del tetto · ' + buono + ' Mbps', 'Senza scatti fino a ' + buono + ' Mbps.\n' + righe.join('\n'), [
+        { testo: 'Usa ' + buono + ' Mbps', fn: function () { usa({ scelta: 'prova', mbps: buono }); } }, { testo: 'Lascia com\'era', fn: apriTetto }]);
+      else fermo('Prova del tetto', 'Il TV scatta già a ' + Math.round(es[0].mbps) + ' Mbps: meglio il tetto a 80.\n' + righe.join('\n'), [
+        { testo: 'Usa 80 Mbps', fn: function () { usa({ scelta: '80' }); } }, { testo: 'Lascia com\'era', fn: apriTetto }]);
+    }
+    pv.id = 'prova-video';
+    pv.muted = true;
+    pv.setAttribute('playsinline', '');
+    pv.preload = 'auto';
+    provaStato.v = pv;
+    $('fermo').parentNode.insertBefore(pv, $('fermo'));
+    $('fermo').className = 'sopra-video';
+    fermo('Prova del tetto', 'Non toccare niente: dura circa ' + Math.ceil(durata / 10) * 10 + ' secondi.', [{ testo: 'Annulla', fn: annulla }]);
+    pv.addEventListener('playing', function () {
+      if (!vivo()) return;
+      partito = true;
+      if (tFermo) { if (kFermo >= 0) es[kFermo].msFermo += Date.now() - tFermo; tFermo = 0; }
+    });
+    pv.addEventListener('waiting', function () {
+      if (!vivo() || !partito || tFermo || pv.seeking) return;
+      kFermo = scalino(pv.currentTime || 0);
+      if (kFermo >= 0) es[kFermo].fermate++;
+      tFermo = Date.now();
+    });
+    pv.addEventListener('timeupdate', function () { if (vivo() && partito) segna(); });
+    pv.addEventListener('ended', function () { if (vivo()) fine('fine'); });
+    pv.addEventListener('error', function () { if (vivo()) fine('errore', pv.error ? pv.error.code : 0); });
+    // il cane da guardia: fermo da 20 s, o molto oltre la durata, e la prova finisce con quello che c'e'
+    provaStato.cane = setInterval(function () {
+      if (!vivo()) return;
+      var t = pv.currentTime || 0, ora = Date.now();
+      if (t !== ultimoT) { ultimoT = t; fermoDa = ora; }
+      if (ora - fermoDa > 20000 || ora - inizio > (durata + 90) * 1000) fine('bloccato');
+    }, 1000);
+    pv.src = serv.base + '/api/video/g/' + serv.gettone + '/mac/p' + via;
+    var pp = pv.play();
+    if (pp && pp.then) pp.then(null, function () {});
   }
   // quanto e' veloce questo TV per convertire l'audio DTS e TrueHD (prove/audio-tv): qualche secondo di misura nel servizio
   function misuraVelocita() {
@@ -925,7 +1068,8 @@
         var q = Math.round(r.dtsAc3 * 100), q2 = Math.round(r.truehdAc3 * 100);
         t = 'Rispetto al Mac di riferimento questo TV è ' + String(r.rapporto).replace('.', ',') + ' volte più lento.\n' +
           'Convertire l\'audio DTS in Dolby Digital costerebbe circa il ' + q + '% di un core' + (q < 50 ? ' (regge)' : q < 80 ? ' (al limite)' : ' (troppo)') +
-          '; il TrueHD Atmos il ' + q2 + '%.\nNode ' + r.node + ' · ' + r.arch + ' · worker_threads ' + (r.workerThreads ? 'sì' : 'no') +
+          '; il TrueHD Atmos il ' + q2 + '%.\nIl TV converte da solo l\'audio che regge; quello che non regge resta senza audio (meglio dal Mac).' +
+          '\nNode ' + r.node + ' · ' + r.arch + ' · worker_threads ' + (r.workerThreads ? 'sì' : 'no') +
           '\nWebAssembly: fir ' + r.wasm.fir + ' ms, quant ' + r.wasm.quant + ' ms · JavaScript: fir ' + r.js.fir + ' ms, quant ' + r.js.quant + ' ms';
       }
       fermo('Velocità del TV', t, indietro);
@@ -1991,7 +2135,7 @@
           for (var i = 0; i < buoni.length; i++) if (buoni[i].num === x.audio) k = i;
           x.audio = buoni[(k + 1) % buoni.length].num;
           disegnaScheda(x);
-        }, a ? nomeLingua(a.lingua) + ' · ' + a.nomeCodec : ''));
+        }, a ? nomeLingua(a.lingua) + ' · ' + a.nomeCodec + (a.tv ? ' dal TV' : '') : ''));
       }
       var sl = info.sotto.filter(function (z) { return z.leggibile; });
       if (sl.length) {
@@ -2189,27 +2333,41 @@
 
   /* ============================================================ informazioni tecniche: insegne e avvisi */
 
-  function badgeDi(info, audio) {
+  // conv: il video rifatto da Jellyfin per una qualita' piu' bassa ({ mbps, larg }). Jellyfin quando converte esce sempre in
+  // SDR ("Currently we only encode to SDR"): i colori di un film HDR li adatta il chip del Mac, e l'insegna lo dice
+  function badgeDi(info, audio, conv) {
     var out = [], v = info.video;
     if (v) {
-      out.push({ t: v.largh >= 3200 ? '4K' : v.largh >= 1900 ? 'HD 1080' : v.largh >= 1200 ? 'HD 720' : 'SD', forte: v.largh >= 3200 });
-      if (v.hdr === 'DV') out.push({ t: 'DOLBY VISION', forte: false, nota: 'il TV usa HDR10' });
+      var largh = conv && conv.larg ? Math.min(v.largh, conv.larg) : v.largh;
+      out.push({ t: largh >= 3200 ? '4K' : largh >= 1900 ? 'HD 1080' : largh >= 1200 ? 'HD 720' : 'SD', forte: largh >= 3200 });
+      if (conv && v.hdr) out.push({ t: 'SDR · colori adattati', conv: true });
+      else if (v.hdr === 'DV') out.push({ t: 'DOLBY VISION', forte: false, nota: 'il TV usa HDR10' });
       else if (v.hdr) out.push({ t: v.hdr, forte: true });
       out.push({ t: v.nomeCodec });
     }
     var a = null, num = audio !== undefined ? audio : (info.scelta || {}).audio;
     for (var i = 0; i < info.audio.length; i++) if (info.audio[i].num === num) a = info.audio[i];
-    if (a) out.push({ t: a.nomeCodec + (a.canali ? ' ' + canali(a.canali) : '') + (a.server ? ' · convertito' : ''), conv: !!a.server });
+    // il DTS o TrueHD che converte il TV esce in Dolby Digital 5.1 (al massimo 6 canali)
+    if (a) out.push({ t: a.nomeCodec + (a.canali ? ' ' + canali(a.tv ? Math.min(6, a.canali) : a.canali) : '') + (a.server ? ' · convertito' : a.tv ? ' · convertito dal TV' : ''), conv: !!(a.server || a.tv) });
     else if (info.audio.length) out.push({ t: 'AUDIO NON LETTO', no: true });
     if (info.sotto.length) out.push({ t: 'SOTTOTITOLI' });
     return out;
   }
   function sconosciuto(info) { return info.avvisi.indexOf('sconosciuto') !== -1 || info.avvisi.indexOf('struttura') !== -1; }
+  // la traccia audio scelta, se e' un DTS o TrueHD che converte il TV (il servizio: tv-sito/audio-tv.js)
+  function audioDelTv(info, num) {
+    for (var i = 0; info && i < info.audio.length; i++) if (info.audio[i].num === num && info.audio[i].tv) return info.audio[i];
+    return null;
+  }
   function avvisoDi(info) {
     if (info.avvisi.indexOf('video') !== -1) return 'Il TV non legge il video di questo file (' + (info.video ? info.video.nomeCodec : 'formato sconosciuto') + ').';
     if (info.avvisi.indexOf('audio') !== -1) {
       var nomi = info.audio.map(function (x) { return x.nomeCodec; }).filter(function (x, i, l) { return l.indexOf(x) === i; }).join(' e ');
-      return 'L\'audio di questo film (' + nomi + ') il TV non lo legge: il video parte senza audio. Si potrà sentire guardandolo dal Mac, che converte l\'audio.';
+      // il TV potrebbe convertirlo (audio-tv.js nel servizio): perche' non lo fa
+      var at = info.audioTv || {}, perche = at.stato === 'lento' ? ', e questo TV è troppo lento per convertirlo (Altro › Velocità del TV)' :
+        at.stato === 'spento' ? ', e questo TV non può convertirlo' : at.stato === 'rotto' ? ', e non riesce a convertirlo in questo file' :
+        at.stato === 'misura' ? ', e non so ancora se riesce a convertirlo (Altro › Velocità del TV)' : '';
+      return 'L\'audio di questo film (' + nomi + ') il TV non lo legge' + perche + ': il video parte senza audio. Si potrà sentire guardandolo dal Mac, che converte l\'audio.';
     }
     if (sconosciuto(info)) return 'Questo formato (' + String(info.formato || '').toUpperCase() + ') l\'app non lo apre per controllarlo: lo prova direttamente il lettore del TV.';
     if (info.mbps > 80 && info.video && info.video.codec === 'HEVC') return 'File molto pesante (' + Math.round(info.mbps) + ' Mbps di media): su alcuni TV Samsung del 2022 oltre 80 Mbps il video può scattare.';
@@ -2268,6 +2426,7 @@
       scegliSottotitoliIniziali(x, o.sottoScelto);
       disegnaBadgeOsd();
       if (i.avvisi.indexOf('audio') !== -1) avvisoLettore(avvisoDi(i), 9000);
+      else if (!voce.jf && audioDelTv(i, x.audio)) avvisoLettore('Audio ' + audioDelTv(i, x.audio).nomeCodec + ': lo converte il TV in Dolby Digital', 5000);
       var vo = voce.tvDi || voce, pt = voce.jf ? null : punti[chiaveDi(vo.p, vo.dim)];
       var da = riprendibile(pt, i.durata) ? pt.t : 0;
       // dalla scheda o dalla home: il punto che si vedeva li'
@@ -2310,7 +2469,8 @@
       dopoPlay = function () { v.removeEventListener('playing', dopoPlay); dopoPlay = null; v.pause(); };
       v.addEventListener('playing', dopoPlay);
     }
-    v.src = x.jf ? urlJf(x) : urlFile(x.voce.d, x.voce.p, x.voce.nome, x.audio);
+    // un disco copiato (cartella Blu-ray o DVD): nell'indirizzo il nome con .m2ts o .vob (info.disco.file)
+    v.src = x.jf ? urlJf(x) : urlFile(x.voce.d, x.voce.p, (x.info && x.info.disco && x.info.disco.file) || x.voce.nome, x.audio);
     v.playbackRate = 1;
     x.velocita = 1;
     applicaSchermo();
@@ -2349,9 +2509,41 @@
   });
   v.addEventListener('pause', function () { if (L) salvaPunto(false); mostraOsd(true); });
   v.addEventListener('ended', function () { if (L) finito(); });
+  // il diario del lettore (per il giro di prove sul TV): primo fotogramma, fermate, salti, ritmo rispetto al tempo vero,
+  // errori. Al servizio vanno solo numeri tecnici (niente titoli ne' percorsi), quando il lettore si chiude
+  function diarioDi(x) { if (!x.diario) x.diario = { t0: Date.now(), primo: 0, fermate: 0, msFermo: 0, tFermo: 0, salti: 0, errore: 0, muro: 0, avanti: 0, tm: 0, mt: -1 }; return x.diario; }
+  v.addEventListener('playing', function () {
+    if (!L) return;
+    var d = diarioDi(L), ora = Date.now();
+    if (!d.primo) d.primo = ora - d.t0;
+    if (d.tFermo) { d.msFermo += ora - d.tFermo; d.tFermo = 0; }
+    d.tm = ora;
+    d.mt = v.currentTime;
+  });
+  v.addEventListener('waiting', function () { if (!L) return; var d = diarioDi(L); if (d.primo && !d.tFermo && !v.seeking) { d.fermate++; d.tFermo = Date.now(); } });
+  v.addEventListener('seeking', function () { if (L) { var d = diarioDi(L); d.salti++; d.mt = -1; } });
+  v.addEventListener('pause', function () { if (L) diarioDi(L).mt = -1; });
+  v.addEventListener('timeupdate', function () {
+    if (!L || v.paused || v.seeking) return;
+    var d = diarioDi(L), ora = Date.now();
+    // il ritmo: secondi di film avanzati per secondo vero, mentre si guarda (1 = in tempo reale)
+    if (d.mt >= 0 && v.currentTime > d.mt && ora > d.tm && ora - d.tm < 5000) { d.avanti += v.currentTime - d.mt; d.muro += (ora - d.tm) / 1000; }
+    d.tm = ora;
+    d.mt = v.currentTime;
+  });
+  function mandaDiario(x) {
+    var d = x.diario, i = x.info || {}, vv = i.video || {}, j = x.jf, a = (i.audio || []).filter(function (t) { return t.num === x.audio; })[0] || {};
+    if (!d || !d.primo && !d.errore) return;
+    var strada = j ? (j.modo === 'mac' ? 'mac' : j.modo || 'diretto') : x.voce.tvDi ? 'versione-tv' : /^(blu-ray|dvd)$/.test(i.formato || '') ? 'disco' : 'chiavetta';
+    chiedi('tv/diario', null, { strada: strada, formato: j && j.modo !== 'diretto' && j.modo !== 'file' ? 'hls' : String(i.formato || '').toLowerCase(),
+      codec: vv.codec || '', larghezza: vv.largh || 0, altezza: vv.alt || 0, hdr: vv.hdr || '', audio: a.codec || '', mbps: i.mbps || 0,
+      picco: i.picchi ? i.picchi.massimo : 0, secondi: Math.round(d.avanti), msPrimo: d.primo, fermate: d.fermate,
+      msFermo: d.msFermo + (d.tFermo ? Date.now() - d.tFermo : 0), salti: d.salti, ritmo: d.muro > 5 ? d.avanti / d.muro : 0, errore: d.errore }).then(null, function () {});
+  }
   v.addEventListener('error', function () {
     if (!L || !v.getAttribute('src')) return;
     var codice = v.error ? v.error.code : 0, x = L, t = v.currentTime || x.daQui || 0;
+    diarioDi(x).errore = codice || 9;
     attesa(false);
     if (codice === 2 && x.errori < 2) {
       // la chiavetta ha rallentato o il servizio si e' fermato un attimo: si riprende da li'
@@ -2422,7 +2614,8 @@
     var b = $('osd-badge');
     svuota(b);
     if (!L || !L.info) return;
-    badgeDi(L.info, L.audio).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.forte ? ' forte' : '') + (x.no ? ' no' : '') + (x.conv ? ' conv' : ''), x.t)); });
+    var g = L.jf && L.jf.g, conv = g && g.modo === 'converti' ? g.qualita || {} : null;
+    badgeDi(L.info, L.audio, conv).forEach(function (x) { b.appendChild(el('span', 'badge' + (x.forte ? ' forte' : '') + (x.no ? ' no' : '') + (x.conv ? ' conv' : ''), x.t)); });
   }
   var centroTimer = null;
   function centro(nome) {
@@ -2473,8 +2666,18 @@
    * capitoli e sottotitoli li legge il servizio); "copia" = HLS di Jellyfin col video originale e l'audio convertito;
    * "converti" = HLS rifatto dal server. Il punto lo tiene Jellyfin (Sessions/Playing, Progress, Stopped). */
 
+  // il 4K si tiene: cambiano solo i Mbps (Jellyfin converte in HEVC col chip del Mac), e 1080p solo per le reti molto lente
   var QUALITA_JF = [{ id: 'orig', nome: 'Originale' }, { id: 'auto', nome: 'Automatica', piccolo: 'misura la rete' },
-    { id: '4k', nome: '4K', piccolo: 'fino a 80 Mbps' }, { id: '1080', nome: '1080p', piccolo: '20 Mbps' }, { id: '720', nome: '720p', piccolo: '8 Mbps' }];
+    { id: '4k40', nome: '4K 40 Mbps', piccolo: 'quasi come l\'originale', mbps: 40 }, { id: '4k25', nome: '4K 25 Mbps', piccolo: 'come lo streaming in 4K', mbps: 25 },
+    { id: '4k15', nome: '4K 15 Mbps', piccolo: 'per le reti lente', mbps: 15 }, { id: '1080p8', nome: '1080p 8 Mbps', piccolo: 'per le reti molto lente', mbps: 8 }];
+  // le scelte di prima salvate nelle preferenze (4K 80, 1080p 20, 720p 8): la nuova piu' vicina
+  var QUALITA_VECCHIE = { '4k': '4k40', '1080': '4k15', '720': '1080p8' };
+  function qualitaBuona(q) {
+    q = QUALITA_VECCHIE[q] || q;
+    return QUALITA_JF.some(function (z) { return z.id === q; }) ? q : 'orig';
+  }
+  // quella scelta dal servizio per l'Automatica: "4K fino a 21 Mbps"
+  function nomeQualita(x) { return (x.larg >= 3840 ? '4K' : x.larg >= 1920 ? '1080p' : x.larg >= 1280 ? '720p' : '480p') + ' fino a ' + x.mbps + ' Mbps'; }
   var NOMI_COD = { EAC3: 'Dolby Digital Plus', AC3: 'Dolby Digital', TRUEHD: 'Dolby TrueHD', DTS: 'DTS', AAC: 'AAC', FLAC: 'FLAC', OPUS: 'Opus',
     MP3: 'MP3', MP2: 'MPEG audio', PCM: 'PCM', VORBIS: 'Vorbis', HEVC: 'HEVC', AVC: 'H.264', AV1: 'AV1', VP9: 'VP9', VP8: 'VP8', MPEG2: 'MPEG-2',
     MPEG4: 'MPEG-4', VC1: 'VC-1', SRT: 'Testo', ASS: 'Testo (ASS)', VTT: 'Testo (WebVTT)', PGS: 'Immagini (PGS)', VOBSUB: 'Immagini (DVD)', TX3G: 'Testo' };
@@ -2530,7 +2733,7 @@
     }, function () { cb(null); });
   }
   function infoJf(x, o) {
-    var it = x.voce.jf, j = x.jf = { id: it.Id, it: it, q: o.trailer ? 'orig' : prefs.qualita || 'orig', mbps: 0, segmenti: [], tp: null, sessione: '', modo: '',
+    var it = x.voce.jf, j = x.jf = { id: it.Id, it: it, q: o.trailer ? 'orig' : qualitaBuona(prefs.qualita), mbps: 0, segmenti: [], tp: null, sessione: '', modo: '',
       ms: '', url: '', g: null, partito: false, prossimo: null, trailer: !!o.trailer };
     // la scheda intera (capitoli, anteprime della barra, serie) se si e' partiti da una voce corta
     var pieno = it.Chapters !== undefined && it.MediaSources ? Promise.resolve(it) : chiediJf('Items/' + it.Id, { userId: uid() });
@@ -2770,7 +2973,7 @@
   function istruzioniVersioneTv(voce, tetto, indietro) {
     var base = voce.nome.replace(/\.[^.]+$/, '');
     fermo('Prepara la versione TV', 'Sul Mac: 1) attacca questa chiavetta al Mac; 2) accendi il limitatore (doppio clic su avvia-limitatore.command); ' +
-      '3) nel Terminale scrivi: node mac/limitatore/limitatore.js versione-tv "/Volumes/<nome della chiavetta>/' + voce.p + '" ' + tetto + ' --accanto\n' +
+      '3) nel Terminale scrivi: node ~/Documents/home-tv/mac/limitatore/limitatore.js versione-tv "/Volumes/<nome della chiavetta>/' + voce.p + '" ' + tetto + ' --accanto\n' +
       'Il Mac scrive «' + base + ' [TV ' + tetto + '].mkv» accanto al film, con tutti gli audio, i sottotitoli e i capitoli. Rimetti la chiavetta nel TV: ' +
       'l\'app la guarda da sola, e l\'originale resta nel pannello.', [{ testo: 'Ho capito', fn: indietro }]);
   }
@@ -3033,7 +3236,7 @@
     L.info.scelta = { audio: num };
     carica(t, pausa);
     disegnaBadgeOsd();
-    messaggio('Audio: ' + nomeLingua(a.lingua) + ' · ' + a.nomeCodec);
+    messaggio('Audio: ' + nomeLingua(a.lingua) + ' · ' + a.nomeCodec + (a.tv ? ' (lo converte il TV)' : ''));
   }
   function prossimoAudio() {
     if (!L || !L.info) return;
@@ -3074,18 +3277,25 @@
     var i = L.info, cols = [], ignoto = sconosciuto(i);
     cols.push({ titolo: 'Audio', voci: ignoto ? [{ testo: 'Audio del file', piccolo: 'lo sceglie il lettore del TV', attiva: true }] : i.audio.length ? i.audio.map(function (a) {
       var conv = L.jf && (!a.letto || a.server);
-      return { testo: nomeLingua(a.lingua) + (a.canali ? ' ' + canali(a.canali) : ''), piccolo: a.nomeCodec + (conv ? ' · lo converte il server' : a.letto ? (a.nome ? ' · ' + a.nome : '') : ' · il TV non lo legge'),
+      return { testo: nomeLingua(a.lingua) + (a.canali ? ' ' + canali(a.tv ? Math.min(6, a.canali) : a.canali) : ''),
+        piccolo: a.nomeCodec + (conv ? ' · lo converte il server' : a.tv ? ' · lo converte il TV' : a.letto ? (a.nome ? ' · ' + a.nome : '') : ' · il TV non lo legge'),
         attiva: a.num === L.audio, spenta: !a.letto && !L.jf, fn: function () { cambiaAudio(a.num); } };
     }).concat([{ testo: 'Ritardo audio', piccolo: 'non si può col lettore del TV: si potrà dal Mac', spenta: true }]) : [{ testo: 'Nessun audio', spenta: true }] });
     if (L.jf && !L.jf.trailer) {
       var j = L.jf, g = j.g || {};
       var vociQ = QUALITA_JF.slice(), mo = g.modo || j.modo, lim = j.lim && j.lim.serve, mb = tettoMac(j);
       if (lim) vociQ.splice(1, 0, { id: 'nolim', nome: 'Originale senza limitatore', piccolo: 'il file vero, coi picchi' });
+      // un film HDR: le qualita' convertite escono in SDR (coi colori adattati dal Mac); l'HDR resta solo nell'originale
+      var hdrFilm = !!(L.info && L.info.video && L.info.video.hdr);
       cols.push({ titolo: 'Qualità', voci: vociQ.map(function (q) {
         var nome = q.id === 'orig' && lim && !j.noLim ? 'Originale con limitatore ai picchi' : q.nome;
+        // si converte (e l'HDR si perde) solo se il film ha piu' Mbps di quella qualita'; l'Automatica lo sa quando e' scelta
+        var converte = q.mbps ? !g.mbps || g.mbps > q.mbps : q.id === 'auto' && j.q === 'auto' && mo === 'converti';
+        var senzaHdr = hdrFilm && converte ? ' · senza HDR' : '';
         return { testo: nome, piccolo: q.id === 'nolim' ? q.piccolo : q.id === 'orig' ? (j.modo === 'mac' ? 'dal Mac, sotto ' + mb + ' Mbps' : lim && !j.noLim ? 'il Mac lo prepara: picchi oltre ' + mb + ' Mbps' :
           (g.mbps ? String(g.mbps).replace('.', ',') + ' Mbps · ' : '') + (mo === 'diretto' || mo === 'file' ? 'il file vero' : mo === 'copia' ? 'video originale' : 'convertito')) :
-          q.id === 'auto' && j.mbps ? 'la rete fa ' + j.mbps + ' Mbps' : q.piccolo, attiva: q.id === 'nolim' ? !!j.noLim : q.id === 'orig' ? j.q === 'orig' && !j.noLim : j.q === q.id,
+          (q.id === 'auto' && j.mbps ? 'la rete fa ' + j.mbps + ' Mbps' + (j.q === 'auto' && g.qualita ? ' · ' + nomeQualita(g.qualita) : '') : q.piccolo) + senzaHdr,
+          attiva: q.id === 'nolim' ? !!j.noLim : q.id === 'orig' ? j.q === 'orig' && !j.noLim : j.q === q.id,
           fn: function () { cambiaQualita(q.id); } };
       }) });
     } else if (L.voce.tvDi || L.tvAltro) {
@@ -3337,6 +3547,7 @@
     var x = L;
     clearInterval(salvaTimer);
     if (x) salvaPunto(true, false, true);
+    if (x) mandaDiario(x);
     L = null;
     if (dopoPlay) { v.removeEventListener('playing', dopoPlay); dopoPlay = null; }
     try { v.pause(); } catch (e) {}

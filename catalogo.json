@@ -1,11 +1,11 @@
 {
   "formato": 1,
-  "nome": "Video",
+  "nome": "Real4K",
   "app": [
     {
       "id": "video",
-      "nome": "Video",
-      "descrizione": "I film e le serie delle chiavette e dei dischi USB attaccati al TV, anche 4K HDR. Sceglie da sola l'audio che il TV legge, disegna i sottotitoli (anche quelli dei Blu-ray) e riprende da dove eri.",
+      "nome": "Real4K",
+      "descrizione": "I tuoi film e le serie in 4K HDR, dal Jellyfin del Mac o dalle chiavette e dai dischi USB attaccati al TV. Sceglie da sola l'audio che il TV legge, disegna i sottotitoli (anche quelli dei Blu-ray) e riprende da dove eri.",
       "icona": "icona.png",
       "copertina": "copertina.png",
       "versione": "1.0.0",
