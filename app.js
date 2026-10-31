@@ -318,6 +318,8 @@
   // niente tela: un <img> che compare quando e' pronto. Al massimo quattro in volo, prima le ultime chieste (le frecce tenute
   // premute non riempiono la coda di copertine gia' passate)
   var dritte = { coda: [], inVolo: 0 }, apertaAlle = Date.now();
+  // finiti i 3 s dell'apertura i posti tornano quattro: si riempiono subito, senza aspettare che finisca un'immagine
+  setTimeout(function () { prossimaDritta(); }, 3050);
   // il riquadro sta in una carta che ha lasciato andare le sue immagini (lontana dalla scelta, o la pagina sotto il lettore)
   function lontano(box) {
     for (var e = box; e && e !== document.body; e = e.parentNode) {
@@ -338,7 +340,8 @@
       dritte.inVolo++;
       (function (x) {
         var im = el('img'), fatto = false, t = null;
-        function fine(si) {
+        // errore: non arrivata (errore del server, o piu' di 6 s), non lasciata da chi non la vuole piu'
+        function fine(si, errore) {
           if (fatto) return;
           fatto = true;
           im.fine = null; // non e' piu' in viaggio: lasciarla poi vuol dire solo staccarla
@@ -347,14 +350,20 @@
           // (tolta intanto: la carta e' andata lontano)
           if (si && (!im.parentNode || lontano(x.box))) si = false;
           if (si) im.className = 'on'; else { im.removeAttribute('src'); if (im.parentNode) im.parentNode.removeChild(im); }
-          if (x.poi) { try { x.poi(si); } catch (e) {} }
+          // non arrivata ma ancora utile: si riprova dopo un attimo, al massimo due volte (31/10 sul TV: alcune copertine non
+          // arrivavano mai, per esempio quando il servizio cade e riparte). Chromium non riusa un'immagine andata in errore
+          if (!si && errore && (x.prove || 0) < 2 && x.box.parentNode && document.body.contains(x.box) && !lontano(x.box)) {
+            x.prove = (x.prove || 0) + 1;
+            setTimeout(function () { dritte.coda.push(x); prossimaDritta(); }, 1500 * x.prove);
+          } else if (x.poi) { try { x.poi(si); } catch (e) {} }
           prossimaDritta();
         }
         im.onload = function () { fine(true); };
-        im.onerror = function () { fine(false); };
-        t = setTimeout(function () { fine(false); }, 15000);
+        im.onerror = function () { fine(false, true); };
+        // al massimo 6 s per immagine: il posto si libera in ogni caso e la coda riparte
+        t = setTimeout(function () { fine(false, true); }, 6000);
         // (tolto src a un'immagine che si sta caricando, Chromium non manda ne' load ne' error: chi la lascia chiama fine, se no il
-        // posto in coda resterebbe preso fino ai 15 secondi, e con quattro posti si fermerebbero tutte le copertine)
+        // posto in coda resterebbe preso fino ai 6 secondi)
         im.fine = fine;
         im.alt = '';
         im.src = x.url;
