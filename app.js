@@ -3602,11 +3602,19 @@
   var L = null; // il video aperto: { voce, info, audio, sotto, eventi, vicini, ritorno, ... }
   var osdTimer = null, salvaTimer = null, attesaTimer = null;
   function tela() { if (!pgs) pgs = PGS.crea($('pgs')); return pgs; }
+  // Real4K dal Mac: il lettore a pezzi (pezzi.js, MSE) del film aperto, se il film arriva a pezzi. Uno solo, fermato a ogni
+  // cambio di sorgente (un altro film, un'altra qualita' o lingua, il lettore chiuso)
+  var pz = null;
+  function fermaPezzi() { if (pz) { pz.ferma(); pz = null; } }
+  function pezziPossibili() { return DAL_MAC && !!window.Pezzi && Pezzi.possibile() && !!window.fetch; }
+  // il film va a pezzi: dal Mac, preparato da Jellyfin (copia o conversione) a pezzi fMP4
+  function aPezzi(x) { var j = x && x.jf; return !!(DAL_MAC && j && j.pezzi && (j.modo === 'copia' || j.modo === 'converti')); }
 
   // ritorno: dove si va con Indietro ('scheda', 'libreria', 'inizio', 'esci' = alla home di Home TV)
   function apriVideo(voce, o) {
     o = o || {};
     clearInterval(dischiTimer);
+    fermaPezzi();
     chiudiPannello();
     var x = L = { voce: voce, info: o.info || null, audio: 0, sotto: null, eventi: [], completi: false, chiesto: -1,
       vicini: o.vicini || null, cartella: o.cartella !== undefined && o.cartella !== null ? o.cartella : voce.p.replace(/\/?[^\/]*$/, ''),
@@ -3712,21 +3720,22 @@
     x.daCarica = da || 0;
     x.dirUltimoT = da || 0;
     x.dirFermoDa = Date.now();
-    // dal Mac un film che non parte si riapre su Real4K del TV, dallo stesso punto: in 45 s nessuna immagine (ne' errore), o
-    // "playing" col tempo che in 15 s non va avanti di 1 s (Il Faro sul TV, sonda del 31/10: playing a 2 s, poi fermo a 0 per
-    // 38 s). Non per i trailer, ne' in pausa o col TV a schermo spento: allora si riguarda dopo. Partito il film, veglia vegliaMac
+    // dal Mac un film che non parte: in 45 s nessuna immagine (ne' errore), o "playing" col tempo che in 15 s non va avanti di 1 s
+    // (Il Faro sul TV, sonda del 31/10: playing a 2 s, poi fermo a 0 per 38 s). Si resta sul Mac (nonParte): a pezzi si riparte
+    // dallo stesso punto, a file si passa ai pezzi. Non per i trailer, ne' in pausa, col TV a schermo spento o mentre Jellyfin
+    // prepara una ricarica: allora si riguarda dopo. Partito il film, veglia vegliaMac
     if (DAL_MAC) {
       clearTimeout(x.macAvvio);
       var inizio = Date.now(), base = -1, fermoDa = 0;
       x.macAvvio = setTimeout(function avvio() {
         if (L !== x || !v.getAttribute('src') || (x.jf && x.jf.trailer)) return;
         var ora = Date.now();
-        if (x.pausaVoluta || document.hidden || (x.partito && v.paused)) { inizio = ora; base = -1; }
+        if (x.pausaVoluta || x.ricarica || document.hidden || (x.partito && v.paused)) { inizio = ora; base = -1; }
         else if (x.partito && !v.seeking) {
           if (base < 0) { base = v.currentTime; fermoDa = ora; }
           else if (Math.abs(v.currentTime - base) >= 1) return;
-          else if (ora - fermoDa >= 15000) { versoIlTv('Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
-        } else if (!x.partito && ora - inizio >= 45000) { versoIlTv('Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
+          else if (ora - fermoDa >= 15000) { nonParte(x, 'Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
+        } else if (!x.partito && ora - inizio >= 45000) { nonParte(x, 'Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
         x.macAvvio = setTimeout(avvio, 3000);
       }, 3000);
     }
@@ -3735,13 +3744,17 @@
       dopoPlay = function () { v.removeEventListener('playing', dopoPlay); dopoPlay = null; v.pause(); };
       v.addEventListener('playing', dopoPlay);
     }
-    // un disco copiato (cartella Blu-ray o DVD): nell'indirizzo il nome con .m2ts o .vob (info.disco.file)
-    v.src = x.jf ? urlJf(x) : urlFile(x.voce.d, x.voce.p, (x.info && x.info.disco && x.info.disco.file) || x.voce.nome, x.audio);
+    // a pezzi (dal Mac): il lettore a pezzi aggancia il <video> subito e scarica dal pezzo che contiene "da". Se no un disco
+    // copiato (cartella Blu-ray o DVD): nell'indirizzo il nome con .m2ts o .vob (info.disco.file)
+    fermaPezzi();
+    x.pezziInCorso = false;
+    if (aPezzi(x)) pz = Pezzi.crea(v, { url: urlJf(x), da: da || 0, log: logPezzi, errore: function (c, t) { pezziNonVanno(x, c, t); } });
+    else v.src = x.jf ? urlJf(x) : urlFile(x.voce.d, x.voce.p, (x.info && x.info.disco && x.info.disco.file) || x.voce.nome, x.audio);
     v.playbackRate = 1;
     x.velocita = 1;
     applicaSchermo();
     if (pgs) pgs.azzera();
-    try { v.load(); } catch (e) {}
+    if (!pz) { try { v.load(); } catch (e) {} }
     var p = v.play();
     if (p && p.then) p.then(null, function () {});
     mostraOsd();
@@ -3819,7 +3832,7 @@
     var d = x.diario, i = x.info || {}, vv = i.video || {}, j = x.jf, a = (i.audio || []).filter(function (t) { return t.num === x.audio; })[0] || {};
     if (!d || !d.primo && !d.errore) return;
     var strada = j ? (j.modo === 'mac' ? 'mac' : j.modo || 'diretto') : x.voce.tvDi ? 'versione-tv' : /^(blu-ray|dvd)$/.test(i.formato || '') ? 'disco' : 'chiavetta';
-    chiedi('tv/diario', null, { strada: strada, formato: j && j.modo !== 'diretto' && j.modo !== 'file' ? 'hls' : String(i.formato || '').toLowerCase(),
+    chiedi('tv/diario', null, { strada: strada, formato: j && j.modo !== 'diretto' && j.modo !== 'file' ? (j.pezzi ? 'pezzi' : 'hls') : String(i.formato || '').toLowerCase(),
       codec: vv.codec || '', larghezza: vv.largh || 0, altezza: vv.alt || 0, hdr: vv.hdr || '', audio: a.codec || '', mbps: i.mbps || 0,
       picco: i.picchi ? i.picchi.massimo : 0, secondi: Math.round(d.avanti), msPrimo: d.primo, fermate: d.fermate,
       msFermo: d.msFermo + (d.tFermo ? Date.now() - d.tFermo : 0), salti: d.salti, ritmo: d.muro > 5 ? d.avanti / d.muro : 0, errore: d.errore,
@@ -3834,6 +3847,8 @@
     // dall'indirizzo del Mac nel <video>)
     if (usaDiretto(x)) { erroreDiretto(x); return; }
     diarioDi(x).errore = codice || 9;
+    // a pezzi dal Mac: lo decide pezziNonVanno (si riparte dallo stesso punto, restando sul Mac)
+    if (aPezzi(x)) { pezziNonVanno(x, 'video', String(codice)); return; }
     attesa(false);
     if (codice === 2 && x.errori < 2) {
       // la chiavetta ha rallentato o il servizio si e' fermato un attimo: si riprende da li'
@@ -3852,8 +3867,8 @@
       ricaricaJf({ a: audioPerJf(x), testo: 'Questa qualità non va sul TV: riparto in Originale' });
       return;
     }
-    // dal Mac un film che il lettore non legge neanche cosi': invece di fermarsi qui si riapre su Real4K del TV, dallo stesso punto
-    if (DAL_MAC && x.jf && !x.jf.trailer) { versoIlTv('Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
+    // dal Mac un film a file che il lettore non legge neanche cosi': lo stesso punto a pezzi preparati da Jellyfin (nonParte)
+    if (DAL_MAC && x.jf && !x.jf.trailer) { nonParte(x, 'Questo film dal Mac non parte: lo apro su Real4K del TV'); return; }
     var azioni = [{ testo: 'Riprova', fn: function () { chiudiFermo(); if (L === x) { x.errori = 0; carica(t); } } }];
     if (x.jf && x.jf.q !== 'orig') {
       azioni.push({ testo: 'Guarda in Originale', fn: function () {
@@ -4098,7 +4113,7 @@
       if (L === x) $('osd-titolo').textContent = titoloJf(itp);
       var s = JF.scheda(itp);
       x.jfDa = o.daCapo ? 0 : o.daHome && riprendibileJf(s) ? s.punto : o.t > 0 ? o.t : riprendibileJf(s) ? s.punto : 0;
-      if (j.q === 'auto') return chiedi('jf/veloce').then(function (r) { j.mbps = r.mbps; }, function () { j.q = 'orig'; });
+      if (j.q === 'auto') return misuraRete(false).then(function (r) { j.mbps = r.mbps; }, function () { j.q = 'orig'; });
     }).then(function () { return stradaJf(x, x.jfDa); }).then(function (info) {
       if (L !== x || !puoLimitare(x)) return info;
       var fatto = false;
@@ -4126,22 +4141,28 @@
       return info;
     });
   }
-  // la strada e le tracce per il pannello, nella forma delle chiavette (a: l'audio voluto, indice di Jellyfin)
-  function stradaJf(x, t, a) {
+  // la strada e le tracce per il pannello, nella forma delle chiavette (a: l'audio voluto, indice di Jellyfin; via: 'pezzi' per
+  // avere dal Mac i pezzi preparati da Jellyfin anche quando il file andrebbe diretto)
+  function stradaJf(x, t, a, via) {
     var j = x.jf;
     j.giroMac = (j.giroMac || 0) + 1;
     var q = { q: j.q, t: Math.round(t || 0), ms: j.ms || undefined };
     if (j.q === 'auto') q.mbps = j.mbps || undefined;
     if (a !== undefined && a !== null) q.a = a;
+    if (via) q.via = via;
     var vuole = vuoleDiretto(x);
     if (vuole) q.diretto = 1;
     return chiedi('jf/guarda/' + j.id, q).then(function (g) {
-      // dal Mac solo i film a file (Originale, con Range): l'HLS nativo del TV da una pagina http del Mac non parte (sonda del
-      // 31/10). Una qualita' convertita, un audio da convertire o Senza picchi vanno subito su Real4K del TV, dallo stesso punto.
-      // Anche l'audio che Jellyfin fa sentire quando il TV non lo legge (DTS, TrueHD): a file si sentirebbe un'altra traccia, cioe'
-      // un'altra lingua (Il Faro, 31/10: l'italiano e' DTS, dal Mac solo l'inglese). Sul TV il server lo converte
+      // dal Mac l'HLS nativo del TV da una pagina http non parte (sonda del 31/10): i film a file (Originale, con Range) vanno al
+      // <video>, quelli che prepara il server (qualita' convertite, audio da convertire) arrivano a pezzi fMP4 letti dall'app
+      // (pezzi.js, MSE). L'audio che Jellyfin fa sentire quando il TV non lo legge (DTS, TrueHD: Il Faro, Thor) si chiede di nuovo
+      // per indice, cosi' il server lo converte: a file si sentirebbe un'altra traccia, cioe' un'altra lingua. Solo con un ponte
+      // che non da' pezzi fMP4 (non aggiornato) o un TV senza MSE si va, come prima, su Real4K del TV dallo stesso punto
       var sentito = DAL_MAC ? (g.audio || []).filter(function (z) { return z.indice === g.audioScelto; })[0] : null;
-      if (DAL_MAC && ((g.modo !== 'diretto' && g.modo !== 'file') || (sentito && !sentito.letto))) {
+      var aFile = g.modo === 'diretto' || g.modo === 'file';
+      if (DAL_MAC && aFile && sentito && !sentito.letto && (a === undefined || a === null) && pezziPossibili()) return stradaJf(x, t, g.audioScelto, via);
+      var pezzi = DAL_MAC && !aFile && pezziPossibili() && /[?&]SegmentContainer=mp4(&|$)/i.test(String(g.url || ''));
+      if (DAL_MAC && ((!aFile && !pezzi) || (aFile && sentito && !sentito.letto))) {
         if (!x.partito) x.daCarica = t || 0;
         versoIlTv(sentito && !sentito.letto ? 'Questo film ha l\'audio che converte il server: lo apro su Real4K del TV' :
           'Questo film, con questa qualità, lo apro su Real4K del TV');
@@ -4149,6 +4170,7 @@
       }
       j.g = g;
       j.modo = g.modo;
+      j.pezzi = pezzi;
       j.url = g.url;
       j.ms = g.ms;
       j.sessione = g.sessione;
@@ -4395,34 +4417,108 @@
       else HomeTV.esci();
     }, 2500);
   }
-  // il film dal Mac fermo da 20 s mentre dovrebbe andare: si controlla il ponte. Fermo da 40 s col ponte che risponde (il
-  // lettore del TV che non va avanti): si torna a Real4K del TV, dallo stesso punto
+  // il film dal Mac fermo da 20 s mentre dovrebbe andare: si controlla il ponte (se non risponde, macPerso). Fermo da 40 s col
+  // ponte che risponde (il lettore del TV che non va avanti): si resta sul Mac (nonParte), dallo stesso punto
   function vegliaMac(x) {
     if (!DAL_MAC) return;
     var ora = Date.now();
-    if (!x.partito || v.paused || v.ended || document.hidden || Math.abs(v.currentTime - (x.macUltimoT || 0)) > 0.5) {
+    if (x.pezziRifatti && x.partito && Math.abs(v.currentTime - (x.pezziDa || 0)) > 120) x.pezziRifatti = 0;
+    // (fermo mentre Jellyfin prepara una ricarica: aspetta quella, che ha i suoi tempi)
+    if (!x.partito || x.ricarica || v.paused || v.ended || document.hidden || Math.abs(v.currentTime - (x.macUltimoT || 0)) > 0.5) {
       x.macUltimoT = v.currentTime;
       x.macFermoDa = ora;
       x.macControllato = false;
       return;
     }
     var fermo = ora - (x.macFermoDa || ora);
-    if (fermo >= 40000) versoIlTv('Il film dal Mac si è fermato: lo riapro su Real4K del TV');
+    if (fermo >= 40000) { x.macFermoDa = ora; nonParte(x, 'Il film dal Mac si è fermato: lo riapro su Real4K del TV'); }
     else if (fermo >= 20000 && !x.macControllato) { x.macControllato = true; controllaMac(); }
   }
+  // dal Mac un film che non parte o si ferma resta sul Mac: a pezzi si riparte dallo stesso punto (pezziNonVanno), a file si passa
+  // ai pezzi preparati da Jellyfin. Su Real4K del TV (testo) solo se non c'e' altro: un ponte che non sa dare i pezzi, o i pezzi
+  // gia' provati per questo film
+  function nonParte(x, testo) {
+    if (L !== x) return;
+    if (aPezzi(x)) { pezziNonVanno(x, 'fermo'); return; }
+    if (x.jf && (x.jf.modo === 'diretto' || x.jf.modo === 'file') && aPezziDalFile(x)) return;
+    versoIlTv(testo);
+  }
+  function aPezziDalFile(x) {
+    if (!x.jf || x.jf.trailer || x.daFileAPezzi || !pezziPossibili()) return false;
+    x.daFileAPezzi = true;
+    // (per tutto il film: anche le ricariche dopo, per l'audio, la qualita' o un guasto, restano a pezzi)
+    x.jf.via = 'pezzi';
+    ricaricaJf({ a: audioPerJf(x), via: 'pezzi', t: puntoDiretto(x), pausa: !!x.pausaVoluta, testo: 'Il file non va: lo prepara il Mac, dallo stesso punto' });
+    return true;
+  }
+  // un film a pezzi che non va (codice: quello di pezzi.js, 'video' per un errore del <video>, 'fermo' per le vegli). Si resta sul
+  // Mac: due volte si riparte dallo stesso punto con una preparazione nuova di Jellyfin; una qualita' convertita torna
+  // all'Originale; poi il messaggio, con Riprova. Su Real4K del TV solo un TV che non sa leggere i pezzi (MSE senza questi
+  // codec); col Mac che non risponde piu' ci pensa controllaMac
+  function pezziNonVanno(x, codice, testo) {
+    if (L !== x || !x.jf || x.uscito) return;
+    // (lo stesso guasto arriva spesso due volte, dal lettore a pezzi e dal <video>: una riprova alla volta, fino al carica dopo)
+    if (x.pezziInCorso) return;
+    x.pezziInCorso = true;
+    var stato = pz ? pz.stato() : null;
+    logPezzi('non va: ' + codice + (testo ? ' ' + testo : '') + (stato ? ' ' + JSON.stringify(stato) : ''));
+    if (!diarioDi(x).errore) diarioDi(x).errore = 8;
+    if (codice === 'formato') { versoIlTv('Questo TV non legge i film preparati dal Mac: lo apro su Real4K del TV'); return; }
+    var t = puntoDiretto(x);
+    if (codice === 'accesso') {
+      fermaPezzi();
+      attesa(false);
+      fermo('Non riesco ad aprire questo video', 'Jellyfin chiede di collegarsi di nuovo (Altro › Jellyfin).', [{ testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
+      return;
+    }
+    if (codice === 'rete') controllaMac();
+    function fine(e) {
+      if (L !== x) return;
+      fermaPezzi();
+      attesa(false);
+      fermo('Il film non va', codice === 'rete' || (e && e.codice === 'rete') ? 'Il Mac non manda i pezzi del film: Jellyfin è acceso?' :
+        codice === 'quota' ? 'Il TV non ha più posto per il film.' : 'Il TV non riesce a leggere i pezzi che prepara il Mac.', [
+        { testo: 'Riprova', fn: function () { chiudiFermo(); if (L !== x) return; x.pezziRifatti = 0; ricaricaJf({ a: audioPerJf(x), t: t, pausa: false, seNo: fine }); } },
+        { testo: 'Indietro', fn: function () { chiudiFermo(); chiudiLettore(); } }]);
+    }
+    // (le riprove si contano per tratto di film: dopo 2 minuti buoni si riparte da zero, vedi vegliaMac)
+    if ((x.pezziRifatti || 0) < 2) {
+      x.pezziRifatti = (x.pezziRifatti || 0) + 1;
+      x.pezziDa = t;
+      ricaricaJf({ a: audioPerJf(x), t: t, pausa: !!x.pausaVoluta, testo: x.pezziRifatti > 1 ? 'Riparto dallo stesso punto' : '', seNo: fine });
+      return;
+    }
+    // una qualita' convertita che non va torna all'Originale, che resta scelto solo se e' il TV a non leggerne i pezzi (come
+    // nell'HLS); con un guasto della rete o del Mac solo per questo film. Mai col TV pieno: l'Originale pesa di piu'
+    if (x.jf.q && x.jf.q !== 'orig' && !x.giaOriginale && codice !== 'quota') {
+      x.giaOriginale = true;
+      if (codice === 'video' || codice === 'append') { prefs.qualita = 'orig'; salvaPrefs(); }
+      x.jf.q = 'orig';
+      ricaricaJf({ a: audioPerJf(x), t: t, pausa: !!x.pausaVoluta, testo: 'Questa qualità non va: riparto in Originale', seNo: fine });
+      return;
+    }
+    fine(null);
+  }
+  function logPezzi(t) { try { if (window.console) console.log('[pezzi] ' + t); } catch (e) {} }
   // una conversione del server che non serve piu' (si cambia qualita' o audio, si esce): si ferma subito
   function fermaConversione(j) {
     if (!j || j.modo === 'diretto' || j.modo === 'file' || !j.sessione) return;
     chiediJf('Videos/ActiveEncodings', { PlaySessionId: j.sessione }, null, 'DELETE', 'ora').then(null, function () {});
   }
-  // stesso film, altra strada (audio o qualita' cambiati): dallo stesso punto, in pausa se lo era
+  // stesso film, altra strada (audio o qualita' cambiati): dallo stesso punto, in pausa se lo era. opz: a (audio), testo, e per
+  // le riprove dal Mac t (il punto), pausa, via ('pezzi'), seNo (se Jellyfin non risponde)
   function ricaricaJf(opz) {
     var x = L;
     if (!x || !x.jf) return;
-    var t = v.currentTime || x.daQui || 0, pausa = v.paused, vecchio = { modo: x.jf.modo, sessione: x.jf.sessione, diretto: x.jf.diretto };
+    var t = opz.t !== undefined ? opz.t : v.currentTime || x.daQui || 0, pausa = opz.pausa !== undefined ? opz.pausa : v.paused;
+    var vecchio = { modo: x.jf.modo, sessione: x.jf.sessione, diretto: x.jf.diretto };
     riportaJf('fine', t);
+    // (a pezzi: la preparazione vecchia Jellyfin la chiude adesso, e i suoi pezzi fallirebbero mentre si aspetta la nuova)
+    fermaPezzi();
+    x.ricarica = true;
     attesa(true);
-    stradaJf(x, t, opz.a).then(function (info) {
+    stradaJf(x, t, opz.a, opz.via || x.jf.via).then(function (info) {
+      x.ricarica = false;
       if (L !== x) return;
       fermaConversione(vecchio);
       fineDirettoJf(vecchio);
@@ -4434,7 +4530,9 @@
       if (opz.testo) messaggio(opz.testo, 3500);
       if (puoLimitare(x)) limitaJf(true);
     }, function (e) {
+      x.ricarica = false;
       attesa(false);
+      if (L === x && typeof opz.seNo === 'function') { opz.seNo(e); return; }
       messaggio(e.codice === 'rete' ? 'Jellyfin non risponde: riprova' : 'Jellyfin non riesce a preparare il film cosi\'', 4500);
     });
   }
@@ -4548,6 +4646,38 @@
       'Il Mac scrive «' + base + ' [TV ' + tetto + '].mkv» accanto al film, con tutti gli audio, i sottotitoli e i capitoli. Rimetti la chiavetta nel TV: ' +
       'l\'app la guarda da sola, e l\'originale resta nel pannello.', [{ testo: 'Ho capito', fn: indietro }]);
   }
+  // la velocita' della rete per l'Automatica. Sul TV la misura il servizio (da Jellyfin al TV); dal Mac il servizio e' il Mac
+  // stesso, quindi la misura l'app: byte a vuoto dal ponte del Mac al TV, 8 MB e, se va forte, altri 16 (tenuta 20 minuti, come
+  // fa il servizio). Un ponte che non la sa fare risponde 404: errore, e l'Automatica resta l'Originale come prima
+  var reteMac = null;
+  function misuraRete(nuova) {
+    if (!DAL_MAC) return chiedi('jf/veloce', nuova ? { nuova: 1 } : null);
+    if (!nuova && reteMac && Date.now() - reteMac.quando < 1200000) return Promise.resolve({ mbps: reteMac.mbps });
+    function una(n) {
+      return new Promise(function (ok, ko) {
+        if (!window.fetch || !window.AbortController) { ko(erroreCon('servizio')); return; }
+        var t0 = Date.now(), tot = 0, ctl = new AbortController(), finito = false;
+        function fine(e, m) { if (finito) return; finito = true; clearTimeout(timer); if (e) { try { ctl.abort(); } catch (z) {} ko(e); } else ok(m); }
+        var timer = setTimeout(function () { fine(erroreCon('lento')); }, 20000);
+        fetch(serv.base + '/api/video/g/' + serv.gettone + '/velocita?byte=' + n, { cache: 'no-store', signal: ctl.signal }).then(function (r) {
+          if (r.status !== 200 || !r.body || !r.body.getReader) { fine(erroreCon('servizio')); return; }
+          var rd = r.body.getReader();
+          (function leggi() {
+            rd.read().then(function (x) {
+              if (finito) return;
+              if (x.done) { fine(tot < n ? erroreCon('servizio') : null, tot * 8 / Math.max(1, Date.now() - t0) / 1000); return; }
+              tot += x.value.length;
+              leggi();
+            }, function () { fine(erroreCon('servizio')); });
+          })();
+        }, function () { fine(erroreCon('servizio')); });
+      });
+    }
+    return una(8 << 20).then(function (m) { return m < 200 ? m : una(16 << 20); }).then(function (m) {
+      reteMac = { mbps: Math.max(1, Math.round(m)), quando: Date.now() };
+      return { mbps: reteMac.mbps };
+    });
+  }
   function cambiaQualita(q) {
     if (!L || !L.jf) return;
     var j0 = L.jf;
@@ -4561,7 +4691,7 @@
     if (q !== 'auto') { ricaricaJf({ testo: 'Qualità: ' + nome }); return; }
     messaggio('Misuro la rete…');
     // scelta a mano: una misura nuova (per i film il servizio tiene l'ultima per 20 minuti)
-    chiedi('jf/veloce', { nuova: 1 }).then(function (r) {
+    misuraRete(true).then(function (r) {
       if (L !== x) return;
       x.jf.mbps = r.mbps;
       ricaricaJf({ testo: 'Qualità automatica: la rete fa ' + r.mbps + ' Mbps' });
@@ -5191,6 +5321,7 @@
     L = null;
     if (dopoPlay) { v.removeEventListener('playing', dopoPlay); dopoPlay = null; }
     try { v.pause(); } catch (e) {}
+    fermaPezzi();
     v.removeAttribute('src');
     try { v.load(); } catch (e) {}
     pulisciLettore();
