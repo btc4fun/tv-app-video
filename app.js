@@ -263,7 +263,11 @@
           try { r = JSON.parse(x.responseText); } catch (e) {}
           if ((x.status === 200 && r) || x.status === 204 || (x.status >= 200 && x.status < 300 && metodo)) { ok(r || {}); return; }
           // (dal Mac un 403 senza codice e' di Jellyfin, non del gettone: il ponte manda sempre codice "gettone")
-          ko(erroreCon(r && r.codice ? r.codice : x.status === 403 && !DAL_MAC ? 'gettone' : x.status === 401 ? 'accesso' : 'servizio', r && r.error));
+          var e = erroreCon(r && r.codice ? r.codice : x.status === 403 && !DAL_MAC ? 'gettone' : x.status === 401 ? 'accesso' : 'servizio', r && r.error);
+          // il Mac che non risponde al suo indirizzo: il servizio lo sta cercando nella rete ('cerco') o l'ha appena ritrovato
+          // ('dubbio': trovato a un altro indirizzo, ma senza la prova che sia il tuo Mac: resta quello di prima)
+          if (r && (r.ritrovo === 'cerco' || r.ritrovo === 'ritrovato' || r.ritrovo === 'dubbio')) e.ritrovo = r.ritrovo;
+          ko(e);
         };
         x.onerror = function () { if (DAL_MAC) macTace(); ko(erroreCon('servizio')); };
         x.ontimeout = function () { if (DAL_MAC) macTace(); ko(erroreCon('lento')); };
@@ -1561,8 +1565,9 @@
     // due domande cadute per la rete bastano (il Mac spento o muto: il servizio rinuncia dopo 15 s): quelle ancora in fila non
     // partono, quelle in volo non si aspettano e si dice subito che il Mac non risponde (31/10: con due o tre domande alla volta
     // arrivava dopo 33 s invece di 15)
-    var cadute = 0, giu = null, giuArrivato = new Promise(function (ok) { giu = ok; }), gr = 'inizio' + giro;
+    var cadute = 0, ritrovo = '', giu = null, giuArrivato = new Promise(function (ok) { giu = ok; }), gr = 'inizio' + giro;
     function no(e) {
+      if (e && e.ritrovo) ritrovo = e.ritrovo;
       if (e && (e.codice === 'rete' || e.codice === 'servizio' || e.codice === 'lento') && ++cadute === 2 && giro === jf.giro) {
         jfGiu(gr);
         var x = erroreCon('rete');
@@ -1591,6 +1596,7 @@
       d.nuovi = d.nuovi.slice(0, 20);
       var rete = r.filter(function (x) { return x && (x.codice === 'rete' || x.codice === 'servizio' || x.codice === 'lento'); }).length;
       jf.errore = rete >= 3 ? 'rete' : '';
+      jf.ritrovo = jf.errore ? ritrovo : '';
       if (r.some(function (x) { return x && x.codice === 'accesso'; })) { jf.dati = null; if (jf.stato) jf.stato.utente = null; }
       else if (jf.errore) { jf.dati = null; jf.caricato = 0; }
       else {
@@ -1601,9 +1607,11 @@
       }
       ridisegnaJf();
       if (jf.dati) segnaPasso('r4k-fila');
-      // il Mac spento: si riprova da soli ogni 30 secondi finche' si sta all'inizio
+      // il Mac spento: si riprova da soli ogni 30 secondi finche' si sta all'inizio; dopo 4 s se il servizio lo sta cercando
+      // nella rete o l'ha appena ritrovato (ha cambiato indirizzo)
       clearTimeout(jf.riprova);
-      if (jf.errore) jf.riprova = setTimeout(function () { if (schermo === 'inizio' && jfAttivo()) jfCaricaInizio(true); }, 30000);
+      if (jf.errore) jf.riprova = setTimeout(function () { if (schermo === 'inizio' && jfAttivo()) jfCaricaInizio(true); },
+        jf.ritrovo === 'cerco' || jf.ritrovo === 'ritrovato' ? 4000 : 30000);
       if (lenti || jf.dati !== d) return;
       // poi le collezioni (una domanda per collezione): arrivano dopo, l'inizio non le aspetta
       var dc = { collezioni: [] };
@@ -1841,8 +1849,14 @@
     if (!d && jfAttivo()) {
       // il server non risponde (o le file stanno arrivando): una riga sola, col perche'
       var giu = jf.errore === 'rete', sz = el('section', 'sezione jf-giu'), pp = el('div', 'pulsanti');
-      sz.appendChild(el('h2', '', giu ? 'Il Mac non risponde' : 'Un attimo'));
-      sz.appendChild(el('p', 'trama', giu ? 'Non raggiungo «' + (jf.stato.server.nome || 'Jellyfin') + '». Controlla che il Mac sia acceso, con Home TV Film aperta: riprovo da solo.' :
+      // (il Mac che non risponde al suo indirizzo: il servizio del TV lo cerca nella rete di casa, forse ha cambiato indirizzo)
+      var cerco = giu && jf.ritrovo === 'cerco', ritrovato = giu && jf.ritrovo === 'ritrovato', dubbio = giu && jf.ritrovo === 'dubbio';
+      sz.appendChild(el('h2', '', ritrovato ? 'Il Mac ha cambiato indirizzo' : cerco ? 'Il Mac non risponde al suo indirizzo' :
+        dubbio ? 'Il Mac risponde a un altro indirizzo' : giu ? 'Il Mac non risponde' : 'Un attimo'));
+      sz.appendChild(el('p', 'trama', ritrovato ? 'L\'ho ritrovato nella rete di casa: carico i film…' :
+        cerco ? 'Forse ha cambiato indirizzo: lo cerco nella rete di casa…' :
+        dubbio ? 'Non riesco a controllare che sia il tuo Mac: apri Home TV Film sul Mac e riprovo da solo. Se continua, collega di nuovo Jellyfin da Altro.' :
+        giu ? 'Non raggiungo «' + (jf.stato.server.nome || 'Jellyfin') + '». Controlla che il Mac sia acceso, con Home TV Film aperta: riprovo da solo.' :
         'Carico i film del Mac…'));
       if (giu) pp.appendChild(pulsante('Riprova adesso', 'ripeti', function () { messaggio('Riprovo…'); jfCaricaInizio(true); }));
       sz.appendChild(pp);
@@ -1938,7 +1952,11 @@
   // ponte del Mac, per questo TV: dal TV la si legge e la si cambia dal servizio, a pagina intera dal Mac direttamente
   var mac4k = { letto: false, pronto: false, acceso: false };
   function leggiReal4kMac() {
-    chiedi('jf/real4k-mac').then(function (r) { mac4k = { letto: true, pronto: !!(r && r.pronto), acceso: !!(r && r.acceso) }; ricordaReal4kMac(); aggiornaAltro(); },
+    chiedi('jf/real4k-mac').then(function (r) {
+      mac4k = { letto: true, pronto: !!(r && r.pronto), acceso: !!(r && r.acceso), ritrovo: r && typeof r.ritrovo === 'string' ? r.ritrovo : '' };
+      ricordaReal4kMac();
+      aggiornaAltro();
+    },
       function () { mac4k = { letto: true, pronto: false, acceso: false }; aggiornaAltro(); });
   }
   // nel riquadro lo spento va anche nelle preferenze (le tiene la home): spento, la home non prova il Mac e l'apertura di Real4K
@@ -1951,7 +1969,9 @@
   function testoReal4kMac() {
     if (DAL_MAC) return !mac4k.letto || mac4k.acceso ? 'acceso' : 'spento dalla prossima volta';
     if (!mac4k.letto) return prefs.real4kMacNo ? 'spento' : 'acceso';
-    return !mac4k.pronto ? 'il Mac non risponde' : mac4k.acceso ? 'acceso' : 'spento';
+    return !mac4k.pronto ? (mac4k.ritrovo === 'cerco' ? 'il Mac non risponde al suo indirizzo: lo cerco' : mac4k.ritrovo === 'ritrovato' ?
+      'il Mac ha cambiato indirizzo: ritrovato' : mac4k.ritrovo === 'dubbio' ? 'il Mac risponde a un altro indirizzo: da controllare' :
+      'il Mac non risponde') : mac4k.acceso ? 'acceso' : 'spento';
   }
   function cambiaReal4kMac() {
     var acceso = DAL_MAC ? !(!mac4k.letto || mac4k.acceso) : !(mac4k.letto ? mac4k.acceso : !prefs.real4kMacNo);
