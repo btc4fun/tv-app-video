@@ -1,14 +1,120 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" class="apertura">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Real4K</title>
-<!-- la libreria di Home TV, per prima: tasti del telecomando e del telefono, memoria, permesso per le chiavette -->
-<script src="/tv-sito/tv-app.js"></script>
+<!-- l'apertura: il marchio al centro dal primo fotogramma, mentre arrivano gli script e i dati (lo stile e' qui, il marchio e' in
+     tracciati SVG: non aspetta ne' stile.css ne' il carattere). La R di luce: la pancia, poi la gamba d'oro che si accende lungo il
+     suo asse e manda un raggio a terra che si spegne, poi "eal" e "4K". Sul TV ogni strato animato grande costa memoria video, e
+     il TV chiude il servizio quando la pagina lavora all'apertura (31/10): pezzi piccoli, solo transform e opacity, niente che
+     giri all'infinito, alla fine via dal DOM. Intanto l'interfaccia si prepara nascosta (visibility: niente da disegnare) -->
+<style>
+html.apertura .schermo, html.apertura #sfondo { visibility: hidden; -webkit-animation: ap-rete 0s 12s forwards; animation: ap-rete 0s 12s forwards; }
+/* (la rete: senza script l'interfaccia compare comunque dopo 12 s) */
+@-webkit-keyframes ap-rete { to { visibility: visible; } }
+@keyframes ap-rete { to { visibility: visible; } }
+#apertura { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 30; pointer-events: none; -webkit-animation: ap-rete-via 0s 12s forwards;
+  animation: ap-rete-via 0s 12s forwards; }
+@-webkit-keyframes ap-rete-via { to { visibility: hidden; } }
+@keyframes ap-rete-via { to { visibility: hidden; } }
+/* il marchio come quello della testata, 4,9 volte piu' grande; alla fine ci vola dentro */
+#ap-segno { position: absolute; left: 50%; top: 47%; width: 51.243vh; height: 11.363vh; margin: -5.681vh 0 0 -25.621vh; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+#ap-segno svg { position: absolute; display: block; overflow: visible; }
+#ap-pancia { left: 1.149%; top: 0.962%; width: 17.601%; height: 98.077%; -webkit-animation: ap-entra .32s cubic-bezier(.2, .7, .2, 1) both; animation: ap-entra .32s cubic-bezier(.2, .7, .2, 1) both; }
+#ap-gamba { left: 4.614%; top: 47.173%; width: 15.145%; height: 51.865%; -webkit-transform-origin: 17.34% 1.85%; transform-origin: 17.34% 1.85%;
+  -webkit-animation: ap-cresce .42s cubic-bezier(.25, .8, .25, 1) .22s both; animation: ap-cresce .42s cubic-bezier(.25, .8, .25, 1) .22s both; }
+#ap-raggio { left: 13.173%; top: 97.115%; width: 40.294%; height: 146.154%; opacity: 0; -webkit-transform-origin: 8.17% 0.66%; transform-origin: 8.17% 0.66%;
+  -webkit-animation: ap-cresce .55s cubic-bezier(.2, .7, .2, 1) .5s both, ap-spegne .5s ease-in 1s both;
+  animation: ap-cresce .55s cubic-bezier(.2, .7, .2, 1) .5s both, ap-spegne .5s ease-in 1s both; }
+#ap-eal { left: 18.68%; top: 0.962%; width: 38.45%; height: 99.413%; -webkit-animation: ap-sale .55s cubic-bezier(.2, .7, .2, 1) .72s both; animation: ap-sale .55s cubic-bezier(.2, .7, .2, 1) .72s both; }
+#ap-4k { left: 62.45%; top: 0.962%; width: 36.97%; height: 98.077%; -webkit-animation: ap-sale .55s cubic-bezier(.2, .7, .2, 1) .9s both; animation: ap-sale .55s cubic-bezier(.2, .7, .2, 1) .9s both; }
+@-webkit-keyframes ap-entra { from { opacity: .3; -webkit-transform: scale(.97); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes ap-entra { from { opacity: .3; transform: scale(.97); } to { opacity: 1; transform: none; } }
+/* la gamba e il raggio crescono lungo l'asse della gamba (39.8 gradi dalla verticale) */
+@-webkit-keyframes ap-cresce { from { -webkit-transform: rotate(-39.79deg) scaleY(0) rotate(39.79deg); } to { -webkit-transform: rotate(-39.79deg) scaleY(1) rotate(39.79deg); } }
+@keyframes ap-cresce { from { transform: rotate(-39.79deg) scaleY(0) rotate(39.79deg); } to { transform: rotate(-39.79deg) scaleY(1) rotate(39.79deg); } }
+@-webkit-keyframes ap-spegne { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ap-spegne { from { opacity: 1; } to { opacity: 0; } }
+@-webkit-keyframes ap-sale { from { opacity: 0; -webkit-transform: translateY(.9vh); } to { opacity: 1; -webkit-transform: none; } }
+@keyframes ap-sale { from { opacity: 0; transform: translateY(.9vh); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #apertura * { -webkit-animation: none !important; animation: none !important; }
+  /* (la rete dei 12 s resta anche col meno movimento, che in stile.css spegne ogni animazione) */
+  html.apertura .schermo, html.apertura #sfondo { -webkit-animation: ap-rete 0s 12s forwards !important; animation: ap-rete 0s 12s forwards !important; }
+  #apertura { -webkit-animation: ap-rete-via 0s 12s forwards !important; animation: ap-rete-via 0s 12s forwards !important; }
+}
+</style>
 <link rel="stylesheet" href="stile.css">
 </head>
 <body>
+  <!-- il marchio, la R di luce (logo del 31/10): tracciati presi da Instrument Sans (OFL), maiuscole alte 100, linea di base a
+       100. Li usano la testata e l'apertura -->
+  <svg id="r4k-pezzi" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute"><defs><path id="r4k-pancia" d="M6.39 100V0H51.11Q61.94 0 70 3.68Q78.06 7.36 82.5 14.03Q86.94 20.69 86.94 29.58Q86.94 38.33 82.5 44.93Q78.06 51.53 70 55.21Q61.94 58.89 51.11 58.89H23.33V43.19H50.56Q58.19 43.19 62.29 39.65Q66.39 36.11 66.39 29.72Q66.39 23.19 62.36 19.79Q58.33 16.39 50.56 16.39H27.78V100Z"/><path id="r4k-gamba" d="M62.78 100 22.64 48.06H45.28L91.67 100Z"/><path id="r4k-eal" d="M127.5 101.39Q115.69 101.39 106.94 96.74Q98.19 92.08 93.4 83.75Q88.61 75.42 88.61 64.58Q88.61 53.61 93.4 45.35Q98.19 37.08 106.81 32.43Q115.42 27.78 126.81 27.78Q137.78 27.78 145.83 32.22Q153.89 36.67 158.33 44.58Q162.78 52.5 162.78 63.19Q162.78 65.42 162.64 67.29Q162.5 69.17 162.22 70.83H100.83V57.08H145.42L141.81 59.58Q141.81 50.97 137.71 46.88Q133.61 42.78 126.53 42.78Q118.33 42.78 113.82 48.33Q109.31 53.89 109.31 65Q109.31 75.83 113.82 81.11Q118.33 86.39 127.36 86.39Q132.36 86.39 135.97 84.72Q139.58 83.06 141.39 79.31H160.97Q157.5 89.58 149.1 95.49Q140.69 101.39 127.5 101.39Z M214.17 100Q213.33 96.94 212.99 93.47Q212.64 90 212.64 85.42H212.08V51.94Q212.08 47.64 209.24 45.21Q206.39 42.78 200.83 42.78Q195.56 42.78 192.43 44.58Q189.31 46.39 188.33 49.86H168.47Q169.86 40.28 178.33 34.03Q186.81 27.78 201.53 27.78Q216.81 27.78 224.86 34.58Q232.92 41.39 232.92 54.17V85.42Q232.92 88.89 233.4 92.43Q233.89 95.97 235 100Z M189.44 101.39Q178.89 101.39 172.64 96.04Q166.39 90.69 166.39 81.81Q166.39 71.94 173.82 65.9Q181.25 59.86 194.58 58.06L215.28 55.14V67.22L198.06 69.86Q192.5 70.69 189.86 72.92Q187.22 75.14 187.22 79.03Q187.22 82.5 189.72 84.31Q192.22 86.11 196.39 86.11Q202.92 86.11 207.5 82.57Q212.08 79.03 212.08 74.31L214.03 85.42Q210.97 93.33 204.72 97.36Q198.47 101.39 189.44 101.39Z M246.11 100V0H266.94V100Z"/><path id="r4k-4k" d="M343.61 100V73.61L343.89 70.83V13.75H347.64L305.42 71.53L301.67 66.94H368.33V76.94H293.89V68.33L344.17 0H355.56V100Z M384.44 100V0H395.83V100Z M394.58 48.06 446.53 0H462.5L409.44 48.06Z M448.75 100 394.31 48.06H409.44L465.28 100Z"/></defs></svg>
+  <!-- l'apertura (vedi lo stile in testa): resta finche' l'inizio e' pronto, poi il marchio vola nella testata e si toglie -->
+  <div id="apertura" aria-hidden="true"><div id="ap-segno"><svg id="ap-raggio" viewBox="61.78 99 188.98 152"><defs><linearGradient id="ap-luce" x1="0" y1="100" x2="0" y2="250" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f2b544" stop-opacity=".75"/><stop offset="1" stop-color="#f2b544" stop-opacity="0"/></linearGradient></defs><path fill="url(#ap-luce)" d="M62.78 100L91.67 100L249.76 250L178.7 250Z"/></svg><svg id="ap-pancia" viewBox="5.39 -1 82.55 102"><use xlink:href="#r4k-pancia" fill="#f4f2ed"/></svg><svg id="ap-gamba" viewBox="21.64 47.06 71.03 53.94"><use xlink:href="#r4k-gamba" fill="#f2b544"/></svg><svg id="ap-eal" viewBox="87.61 -1 180.33 103.39"><use xlink:href="#r4k-eal" fill="#f4f2ed"/></svg><svg id="ap-4k" viewBox="292.89 -1 173.39 102"><use xlink:href="#r4k-4k" fill="#f4f2ed"/></svg></div></div>
+  <script>
+  // l'apertura: se ne va quando app.js dice che l'inizio e' pronto (Apertura.pronta), ma non prima che il marchio sia arrivato;
+  // subito se si apre un altro schermo (Apertura.via: un film dalla home); al primo tasto; al massimo dopo 9 s. Il marchio vola
+  // al posto di quello della testata, poi l'interfaccia compare e l'apertura si toglie dal DOM. Con meno movimento: niente volo
+  (function () {
+    var radice = document.documentElement, ap = document.getElementById('apertura'), segno = document.getElementById('ap-segno');
+    var INTRO = 1450, VOLO = 620, MASSIMO = 9000, t0 = Date.now(), fase = 0, timer = 0, fermo = false;
+    try { fermo = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
+    function togli() {
+      if (fase === 3) return;
+      fase = 3;
+      clearTimeout(timer);
+      radice.className = (' ' + radice.className + ' ').replace(' apertura ', ' ').replace(/^\s+|\s+$/g, '');
+      if (ap && ap.parentNode) ap.parentNode.removeChild(ap);
+      ap = segno = null;
+    }
+    // il marchio nella testata dello schermo che si vedra' (l'inizio, o collegare Jellyfin): lo stesso disegno, piu' piccolo
+    function bersaglio() {
+      var l = document.querySelectorAll('.schermo .testata .marchio svg');
+      for (var i = 0; i < l.length; i++) {
+        var s = l[i];
+        while (s && !(s.className && typeof s.className === 'string' && /(^|\s)schermo(\s|$)/.test(s.className))) s = s.parentNode;
+        if (!s || s.hidden) continue;
+        var a = l[i].getBoundingClientRect();
+        if (a.width > 0) return { x: a.left, y: a.top, w: a.width };
+      }
+      return null;
+    }
+    function esci(subito) {
+      if (fase >= 2) return;
+      fase = 2;
+      clearTimeout(timer);
+      var b = !fermo && !subito && segno ? bersaglio() : null;
+      if (!b) { togli(); return; }
+      var r = segno.getBoundingClientRect(), t = 'translate(' + (b.x - r.left).toFixed(2) + 'px, ' + (b.y - r.top).toFixed(2) + 'px) scale(' + (b.w / r.width).toFixed(5) + ')';
+      ap.className = 'via';
+      segno.style.webkitTransition = '-webkit-transform ' + VOLO + 'ms cubic-bezier(.62, 0, .18, 1)';
+      segno.style.transition = 'transform ' + VOLO + 'ms cubic-bezier(.62, 0, .18, 1)';
+      segno.style.webkitTransform = t;
+      segno.style.transform = t;
+      timer = setTimeout(togli, VOLO + 40);
+    }
+    window.Apertura = {
+      pronta: function () {
+        if (fase) return;
+        fase = 1;
+        clearTimeout(timer);
+        // (almeno 300 ms: l'immagine del banner arriva dal Mac poco dopo la vetrina)
+        timer = setTimeout(function () { esci(false); }, Math.max(INTRO - (Date.now() - t0), 300));
+      },
+      via: function () { esci(true); },
+      // un tasto durante l'apertura (anche durante il volo) la chiude e basta: niente scelte su un'interfaccia che ancora non si
+      // vede (Indietro esce)
+      tasti: function () { if (window.HomeTV && HomeTV.tasti) HomeTV.tasti(function () { if (fase >= 3) return false; esci(false); return true; }); }
+    };
+    timer = setTimeout(function () { esci(false); }, MASSIMO);
+  })();
+  </script>
+  <!-- la libreria di Home TV, per prima tra gli script dell'app: tasti del telecomando e del telefono, memoria, permesso per le
+       chiavette (dopo l'apertura: nel riquadro la home toglie la sua attesa quando l'apertura c'e' gia', senza un nero in mezzo) -->
+  <script src="/tv-sito/tv-app.js"></script>
+  <script>if (window.Apertura) Apertura.tasti();</script>
   <!-- lo sfondo: due strati che si danno il cambio (l'immagine del film scelto), sopra un velo solo (sfumature e grana).
        Dietro la scheda, dopo qualche secondo: il trailer (o il film) senza audio; si spegne in Altro -->
   <div id="sfondo" class="piatto"><div class="strato" id="sfondo-a"></div><div class="strato" id="sfondo-b"></div><video id="trailer" muted playsinline preload="none" hidden></video><div id="velo"></div></div>
@@ -17,7 +123,7 @@
        recente, una fila per ogni collezione, Film, Serie, Chiavette USB, Altro. Senza Jellyfin: "Guarda i film del tuo Mac" -->
   <div id="schermo-inizio" class="schermo">
     <nav id="binario"><div id="binario-fondo"></div><div id="binario-voci"></div></nav>
-    <div class="testata"><div class="marchio">Real<b>4K</b></div><div class="ora" id="ora"></div></div>
+    <div class="testata"><div class="marchio"><svg viewBox="0 -2 469 104" role="img" aria-label="Real4K"><use xlink:href="#r4k-pancia" fill="#f4f2ed"/><use xlink:href="#r4k-gamba" fill="#f2b544"/><use xlink:href="#r4k-eal" fill="#f4f2ed"/><use xlink:href="#r4k-4k" fill="#f4f2ed"/></svg></div><div class="ora" id="ora"></div></div>
     <section id="eroe" hidden>
       <div class="dentro" id="eroe-dentro">
         <div id="eroe-sopra"></div>
@@ -107,7 +213,7 @@
 
   <!-- collegare Jellyfin: il server nella rete di casa, poi il codice da scrivere sul Mac (o da confermare dal telefono) -->
   <div id="schermo-collega" class="schermo" hidden>
-    <div class="testata"><div class="marchio">Real<b>4K</b></div></div>
+    <div class="testata"><div class="marchio"><svg viewBox="0 -2 469 104" role="img" aria-label="Real4K"><use xlink:href="#r4k-pancia" fill="#f4f2ed"/><use xlink:href="#r4k-gamba" fill="#f2b544"/><use xlink:href="#r4k-eal" fill="#f4f2ed"/><use xlink:href="#r4k-4k" fill="#f4f2ed"/></svg></div></div>
     <div id="collega-corpo" class="corpo">
       <section id="collega-sopra">
         <div id="collega-titolo"></div>

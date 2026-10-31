@@ -42,8 +42,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #08090d; col
 .tv-scelto { outline: none !important; box-shadow: none !important; }
 .testata { position: absolute; left: 7.6vw; right: 5vw; top: 4.4vh; height: 6vh; z-index: 3; transition: opacity .3s ease; }
 .marchio { font-size: 3.1vh; font-weight: 700; letter-spacing: -.02em; line-height: 1; white-space: nowrap; }
-.marchio b { display: inline-block; margin-left: .45vh; padding: .32vh .62vh .26vh; border-radius: .55vh; background: #f2b544; color: #08090d;
-  font-size: 2.15vh; font-weight: 700; letter-spacing: .01em; vertical-align: .32vh; }
+/* il marchio: la R di luce in tracciati SVG (index.html), con le maiuscole alte come prima (24 px a 1080 righe) */
+.marchio svg { display: block; width: 10.466vh; height: 2.321vh; margin-top: .314vh; overflow: visible; }
 .ora { position: absolute; right: 0; top: .1vh; font-size: 2.6vh; font-weight: 500; color: rgba(244, 242, 237, .78); font-variant-numeric: tabular-nums; }
 .logo { position: relative; }
 .logo img { display: block; max-width: 34vw; max-height: 15vh; opacity: 0; transition: opacity .35s ease; }
@@ -482,7 +482,9 @@ svg.ic.pieno { fill: currentColor; stroke: none; }
 /* l'anteprima sopra la barra del tempo (le tessere di Jellyfin) */
 #osd-anteprima { position: absolute; bottom: 22.5vh; left: 5vw; width: 42.7vh; height: 24vh; border-radius: 1.4vh;
   overflow: hidden; background: #000; box-shadow: 0 0 0 .32vh rgba(244, 242, 237, .92), 0 2.4vh 6vh rgba(0, 0, 0, .7); }
-#osd-tessera { position: absolute; left: 0; top: 0; background-repeat: no-repeat; transform-origin: 0 0; }
+#osd-tessera { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+/* il foglio alla sua misura vera, come uno sfondo (l'ultimo foglio di Jellyfin puo' avere meno righe) */
+#osd-tessera img { display: block; max-width: none; max-height: none; }
 #osd-capitolo { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* nel pannello: i capitoli con l'immagine */

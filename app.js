@@ -286,9 +286,9 @@
   // da fermare, con la pagina che sta per andarsene)
   var jfCoda = { subito: [], sfondo: [], inVolo: 0 };
   setTimeout(function () { prossimaJf(); }, 3050);
-  function chiediJf(percorso, param, corpo, metodo, coda) {
+  function chiediJf(percorso, param, corpo, metodo, coda, gruppo) {
     return new Promise(function (ok, ko) {
-      var x = { via: 'jf/p/' + percorso, param: param, corpo: corpo, metodo: metodo, ok: ok, ko: ko };
+      var x = { via: 'jf/p/' + percorso, param: param, corpo: corpo, metodo: metodo, ok: ok, ko: ko, gruppo: gruppo || '' };
       if (coda === 'ora') { mandaJf(x); return; }
       jfCoda[coda === 'sfondo' ? 'sfondo' : 'subito'].push(x);
       prossimaJf();
@@ -303,6 +303,15 @@
     jfCoda.inVolo++;
     function fine() { jfCoda.inVolo--; prossimaJf(); }
     chiedi(x.via, x.param, x.corpo, false, x.metodo).then(function (r) { fine(); x.ok(r); }, function (e) { fine(); x.ko(e); });
+  }
+  // il Mac non risponde: le domande di un gruppo ancora in fila (le file dell'inizio) non partono, finirebbero tutte cosi' una
+  // dopo l'altra, e tornano subito con 'rete'. Le altre (un film, una scheda) restano
+  function jfGiu(gruppo) {
+    var tolte = [];
+    ['subito', 'sfondo'].forEach(function (c) {
+      jfCoda[c] = jfCoda[c].filter(function (x) { if (x.gruppo === gruppo) { tolte.push(x); return false; } return true; });
+    });
+    for (var i = 0; i < tolte.length; i++) { try { tolte[i].ko(erroreCon('rete')); } catch (e) {} }
   }
   function urlFile(d, p, nome, audio) {
     // il nome (con l'estensione) nell'indirizzo: alcuni lettori dei TV guardano quello
@@ -678,7 +687,11 @@
   var schermo = '';
   var memInizio = null;
   var CON_IMMAGINI = { inizio: 'schermo-inizio', scheda: 'schermo-scheda', libreria: 'schermo-libreria', cerca: 'schermo-cerca' };
+  // l'apertura di index.html (il marchio al centro mentre arrivano script e dati): se ne va quando l'inizio e' pronto, o subito
+  // quando si apre un altro schermo (un film dalla home)
+  function apertura(pronta) { try { if (window.Apertura) { if (pronta) window.Apertura.pronta(); else window.Apertura.via(); } } catch (e) {} }
   function mostra(nome) {
+    if (nome !== 'inizio') apertura(false);
     if (schermo === 'inizio' && nome !== 'inizio' && pag && pag.corpo === $('inizio-corpo')) memInizio = pag;
     // lo schermo che si lascia lascia andare le sue immagini (tornando si ridisegna sempre): sul TV restano decodificate solo
     // quelle della pagina che si vede
@@ -1025,6 +1038,9 @@
     // della scheda video proprio quando il TV prepara l'app, e il 31/10 il TV ha chiuso il servizio all'apertura di Real4K)
     evidenzia();
     if (vetrina) vetrinaTimer();
+    // l'apertura se ne va quando l'inizio e' quello vero: la vetrina coi film, o senza Jellyfin (o con un problema) le file
+    // semplici. Mentre Jellyfin manda le file si aspetta (al massimo 9 s, vedi index.html)
+    if (vetrina || dischiErrore || jf.errore || (jf.stato && !jfAttivo())) apertura(true);
   }
   // un problema che ferma tutto (il permesso, il servizio del TV vecchio o che non risponde): grande al centro. Le chiavette
   // che il TV non legge sono una riga piccola nel riquadro del Mac
@@ -1542,21 +1558,32 @@
     var lenti = forza !== 'tutto' && jf.lenti && jf.lenti.utente === u && Date.now() - jf.lenti.quando < 600000 ? jf.lenti : null, arrivati = 0;
     jf.caricato = Date.now();
     jf.inCorso = Date.now();
-    function no(e) { return e; }
-    Promise.all([
-      chiediJf('UserItems/Resume', conCampi({ Limit: 12, MediaTypes: 'Video' })).then(function (r) { d.riprendi = voci(r); }, no),
-      chiediJf('Shows/NextUp', conCampi({ UserId: u, Limit: 12, EnableResumable: false })).then(function (r) { d.prossimi = voci(r); }, no),
-      chiediJf('UserViews', { userId: u }).then(function (r) {
+    // due domande cadute per la rete bastano (il Mac spento o muto: il servizio rinuncia dopo 15 s): quelle ancora in fila non
+    // partono, quelle in volo non si aspettano e si dice subito che il Mac non risponde (31/10: con due o tre domande alla volta
+    // arrivava dopo 33 s invece di 15)
+    var cadute = 0, giu = null, giuArrivato = new Promise(function (ok) { giu = ok; }), gr = 'inizio' + giro;
+    function no(e) {
+      if (e && (e.codice === 'rete' || e.codice === 'servizio' || e.codice === 'lento') && ++cadute === 2 && giro === jf.giro) {
+        jfGiu(gr);
+        var x = erroreCon('rete');
+        giu([x, x, x]);
+      }
+      return e;
+    }
+    Promise.race([giuArrivato, Promise.all([
+      chiediJf('UserItems/Resume', conCampi({ Limit: 12, MediaTypes: 'Video' }), null, null, '', gr).then(function (r) { d.riprendi = voci(r); }, no),
+      chiediJf('Shows/NextUp', conCampi({ UserId: u, Limit: 12, EnableResumable: false }), null, null, '', gr).then(function (r) { d.prossimi = voci(r); }, no),
+      chiediJf('UserViews', { userId: u }, null, null, '', gr).then(function (r) {
         d.viste = voci(r).filter(function (x) { return /^(movies|tvshows|homevideos|boxsets|mixed)$/.test(x.CollectionType || 'mixed'); });
         return Promise.all(d.viste.filter(function (x) { return x.CollectionType !== 'boxsets'; }).slice(0, 4).map(function (vista) {
-          return chiediJf('Items/Latest', conCampi({ ParentId: vista.Id, Limit: 16, GroupItems: true })).then(function (r2) { d.nuovi = d.nuovi.concat(voci(r2)); }, no);
+          return chiediJf('Items/Latest', conCampi({ ParentId: vista.Id, Limit: 16, GroupItems: true }), null, null, '', gr).then(function (r2) { d.nuovi = d.nuovi.concat(voci(r2)); }, no);
         }));
       }, no),
       chiediJf('Items', conCampi({ Filters: 'IsFavorite', IncludeItemTypes: 'Movie,Series', Recursive: true, SortBy: 'DatePlayed,SortName',
-        SortOrder: 'Descending', Limit: 30 })).then(function (r) { d.preferiti = voci(r); }, no),
-      lenti ? Promise.resolve(d.film = lenti.film) : elencoJf('Movie').then(function (x) { d.film = x; arrivati++; }, no),
-      lenti ? Promise.resolve(d.serie = lenti.serie) : elencoJf('Series').then(function (x) { d.serie = x; arrivati++; }, no)
-    ]).then(function (r) {
+        SortOrder: 'Descending', Limit: 30 }), null, null, '', gr).then(function (r) { d.preferiti = voci(r); }, no),
+      lenti ? Promise.resolve(d.film = lenti.film) : elencoJf('Movie', gr).then(function (x) { d.film = x; arrivati++; }, no),
+      lenti ? Promise.resolve(d.serie = lenti.serie) : elencoJf('Series', gr).then(function (x) { d.serie = x; arrivati++; }, no)
+    ])]).then(function (r) {
       if (giro !== jf.giro) return;
       jf.inCorso = 0;
       // i nuovi di tutte le librerie insieme, i piu' recenti prima
@@ -1643,9 +1670,10 @@
   // campi): le pagine arrivano quando la fila si avvicina, dalle sue carte in attesa (31/10: la prima pagina di Film, 91 KB coi
   // campi, partiva con tutto il resto anche con la fila in fondo)
   var PAGINA = 40;
-  function elencoJf(tipo) {
+  function elencoJf(tipo, gruppo) {
     var x = { tipo: tipo, tot: 0, voci: [], pagine: {} };
-    return chiediJf('Items', { userId: uid(), IncludeItemTypes: tipo, Recursive: true, Limit: 1, EnableImages: false, EnableUserData: false }).then(function (r) {
+    return chiediJf('Items', { userId: uid(), IncludeItemTypes: tipo, Recursive: true, Limit: 1, EnableImages: false, EnableUserData: false }, null, null, '',
+      gruppo).then(function (r) {
       x.tot = typeof r.TotalRecordCount === 'number' ? r.TotalRecordCount : voci(r).length;
       return x;
     });
@@ -1665,7 +1693,18 @@
     paginaElenco(x, k).then(function () {
       if (giro !== jf.giro || schermo !== 'inizio' || !pag) return;
       for (var r = 0; r < pag.righe.length; r++) if (pag.righe[r].chiave === chiave) { svuotaRiga(pag.righe[r]); evidenzia(); }
-    }, function () {});
+    }, function () {
+      // non arrivata: si riprova da sola dopo 5 s, se la fila ha ancora disegnate carte di quella pagina (31/10: aspettava il
+      // primo tasto)
+      setTimeout(function () {
+        if (giro !== jf.giro || schermo !== 'inizio' || !pag || x.pagine[k]) return;
+        for (var r = 0; r < pag.righe.length; r++) {
+          var R = pag.righe[r];
+          if (R.chiave !== chiave) continue;
+          for (var i in R.voci) if (Object.prototype.hasOwnProperty.call(R.voci, i) && Math.floor(+i / PAGINA) === k) { caricaPaginaFila(x, k, chiave); return; }
+        }
+      }, 5000);
+    });
   }
   // Continua a guardare: le chiavette (la memoria dell'app) e Jellyfin (il punto lo tiene il server), i piu' recenti prima;
   // poi i prossimi episodi delle serie iniziate
@@ -4529,26 +4568,72 @@
     }, function () { messaggio('Non riesco a misurare la rete: resto sull\'originale', 4000); x.jf.q = 'orig'; });
   }
   // l'anteprima grande sopra la barra mentre si scorre: le tessere di Jellyfin (trickplay); senza, l'immagine del capitolo se c'e'
-  // (Jellyfin). Dalle chiavette niente immagini (estrarle peserebbe sul TV): resta il minuto grande col nome del capitolo
+  // (Jellyfin). Dalle chiavette niente immagini (estrarle peserebbe sul TV): resta il minuto grande col nome del capitolo.
+  // I fogli di tessere (richiesta del 31/10): mentre se ne guarda uno arrivano anche quello prima e quello dopo, e finche' il
+  // foglio nuovo non c'e' resta la tessera di prima: mai un riquadro nero. Al massimo 3 fogli (piu' quello che si vede),
+  // lasciati andare finito lo scorrimento (fino a 3200x1800: 23 MB decodificati, mentre gira il 4K)
+  var fogli = { l: {}, voluto: '', visto: '', ultimo: null };
+  function foglioTessere(u) {
+    var x = fogli.l[u];
+    if (x) return x;
+    x = fogli.l[u] = { img: el('img'), pronto: false };
+    x.img.alt = '';
+    x.img.onload = function () {
+      x.pronto = true;
+      // il foglio che serviva adesso: si mostra subito, senza aspettare la prossima pressione
+      if (fogli.voluto === u && fogli.ultimo) anteprimaBarra(fogli.ultimo[0], fogli.ultimo[1]);
+    };
+    x.img.onerror = function () { x.img.onload = x.img.onerror = null; };
+    x.img.src = u;
+    return x;
+  }
+  function lasciaFogli(tenere) {
+    for (var u in fogli.l) {
+      if (!Object.prototype.hasOwnProperty.call(fogli.l, u) || (tenere && tenere[u])) continue;
+      var x = fogli.l[u];
+      x.img.onload = x.img.onerror = null;
+      if (x.img.parentNode) x.img.parentNode.removeChild(x.img);
+      x.img.removeAttribute('src');
+      delete fogli.l[u];
+    }
+  }
   function anteprimaBarra(t, f) {
     var an = $('osd-anteprima'), tp = L && L.jf ? L.jf.tp : null, te = $('osd-tessera'), ci = $('osd-capitolo');
     var cap = t >= 0 && !tp ? capitoloA(t) : null, img = cap && cap.img && serv.gettone ? cap.img : null;
     if (t < 0 || (!tp && !img)) {
       if (!an.hidden) an.hidden = true;
-      // il foglio di tessere (fino a 3200x1800: 23 MB decodificati, mentre gira il 4K) si lascia andare finito lo scorrimento
-      if (te.getAttribute('data-u')) { te.style.backgroundImage = 'none'; te.removeAttribute('data-u'); }
+      if (fogli.voluto || fogli.visto) { lasciaFogli(null); fogli.voluto = fogli.visto = ''; fogli.ultimo = null; }
       if (ci.getAttribute('src')) { ci.removeAttribute('src'); ci.hidden = true; }
       return;
     }
     var W = window.innerWidth, h = Math.round(window.innerHeight * 0.24), w;
     if (tp) {
-      var ts = JF.tessera(tp, t), sc = h / ts.h;
-      var url = serv.base + '/api/video/g/' + serv.gettone + '/jf/p/Videos/' + L.jf.id + '/Trickplay/' + tp.larg + '/' + ts.foglio + '.jpg?MediaSourceId=' + L.jf.ms;
+      var ts = JF.tessera(tp, t), sc = h / ts.h, n = tp.quante ? Math.ceil(tp.quante / (tp.col * tp.righe)) : 0;
+      var base = serv.base + '/api/video/g/' + serv.gettone + '/jf/p/Videos/' + L.jf.id + '/Trickplay/' + tp.larg + '/', coda = '.jpg?MediaSourceId=' + L.jf.ms;
+      var url = base + ts.foglio + coda, prima = base + (ts.foglio - 1) + coda, dopo = base + (ts.foglio + 1) + coda;
+      var vicini = {}, qui = foglioTessere(url);
+      vicini[url] = 1;
+      if (ts.foglio > 0) { vicini[prima] = 1; foglioTessere(prima); }
+      if (!n || ts.foglio + 1 < n) { vicini[dopo] = 1; foglioTessere(dopo); }
+      fogli.voluto = url;
+      fogli.ultimo = [t, f];
       w = Math.round(ts.w * sc);
-      if (te.getAttribute('data-u') !== url) { te.style.backgroundImage = 'url(' + url + ')'; te.setAttribute('data-u', url); }
-      te.style.width = ts.W + 'px';
-      te.style.height = ts.H + 'px';
-      te.style.transform = 'scale(' + sc + ') translate(' + (-ts.x) + 'px,' + (-ts.y) + 'px)';
+      if (qui.pronto) {
+        if (te.firstChild !== qui.img) { svuota(te); te.appendChild(qui.img); }
+        fogli.visto = url;
+        te.style.width = ts.W + 'px';
+        te.style.height = ts.H + 'px';
+        te.style.transform = 'scale(' + sc + ') translate(' + (-ts.x) + 'px,' + (-ts.y) + 'px)';
+      } else if (!fogli.visto) {
+        // nessun foglio ancora arrivato: il riquadro aspetta (il minuto grande si vede gia') e si mostra appena arriva
+        lasciaFogli(vicini);
+        if (!an.hidden) an.hidden = true;
+        ci.hidden = true;
+        return;
+      }
+      // il foglio che si vede resta finche' il nuovo non arriva (con la tessera di prima); quelli lontani si lasciano andare
+      vicini[fogli.visto] = 1;
+      lasciaFogli(vicini);
       te.hidden = false;
       ci.hidden = true;
     } else {
@@ -5090,7 +5175,7 @@
     svuota($('osd-chip'));
     $('avviso-lettore').hidden = true;
     $('osd-meta').hidden = true;
-    $('osd-anteprima').hidden = true;
+    anteprimaBarra(-1, 0); // (nascosta, e via i fogli di tessere)
     $('salta').hidden = true;
     if (pgs) pgs.azzera();
     $('pgs').hidden = true;
