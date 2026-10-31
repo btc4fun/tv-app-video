@@ -452,6 +452,14 @@ svg.ic.pieno { fill: currentColor; stroke: none; }
 /* la scelta col telecomando nei messaggi (la fa tv-app.js) */
 .pulsante.tv-scelto { color: #08090d; transform: scale(1.05); }
 .pulsante.tv-scelto:before { opacity: 1; }
+/* la scelta in lista (la qualita' dalla scheda): una voce per riga, il nome a sinistra e il perche' a destra; Indietro sotto */
+#fermo.lista #fermo-carta { width: 50vw; }
+#fermo.lista p { margin-bottom: 3.4vh; }
+#fermo.lista .pulsante { display: block; box-sizing: border-box; width: 100%; margin: 0 0 1.1vh; padding: 0 3.2vh; text-align: left; }
+#fermo.lista .pulsante small { float: right; margin-left: 2vh; }
+#fermo.lista .pulsante.tv-scelto { transform: scale(1.02); }
+#fermo.lista .pulsante:last-child { display: inline-block; width: auto; margin: 2.6vh 0 0; padding: 0 3.6vh; }
+#fermo.lista .pulsante:last-child.tv-scelto { transform: scale(1.05); }
 
 /* ---------- Jellyfin: generi, librerie, server */
 #trailer { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; object-fit: cover; opacity: 0; transition: opacity 1.2s ease; }

@@ -547,18 +547,23 @@
     sfondoChiave = null;
   }
   var fermoAzioni = [];
-  function fermo(titolo, testo, pulsanti) {
+  // opz.lista: una voce per riga, col suo "piccolo" a destra (la qualita' dalla scheda); opz.scelta: la voce scelta all'inizio
+  function fermo(titolo, testo, pulsanti, opz) {
+    opz = opz || {};
     $('fermo-titolo').textContent = titolo;
     $('fermo-testo').textContent = testo || '';
     var box = $('fermo-pulsanti');
     svuota(box);
+    if (opz.lista) $('fermo').classList.add('lista'); else $('fermo').classList.remove('lista');
     fermoAzioni = pulsanti || [{ testo: 'Indietro', fn: chiudiFermo }];
+    var prima = Math.max(0, Math.min(opz.scelta || 0, fermoAzioni.length - 1));
     for (var i = 0; i < fermoAzioni.length; i++) {
       var b = el('button', 'pulsante', fermoAzioni[i].testo);
+      if (fermoAzioni[i].piccolo) b.appendChild(el('small', '', fermoAzioni[i].piccolo));
       b.setAttribute('data-tv', '');
       b.addEventListener('click', (function (f) { return function () { f.fn(); }; })(fermoAzioni[i]));
       box.appendChild(b);
-      if (!i) HomeTV.scegli(b);
+      if (i === prima) HomeTV.scegli(b);
     }
     $('fermo').hidden = false;
   }
@@ -1888,6 +1893,7 @@
     pp.appendChild(pulsante(ripr ? 'Riprendi' : 'Guarda', 'play', x.guarda, ripr ? 'da ' + tempo(s.punto) : ''));
     if (ripr) pp.appendChild(pulsante('Dall\'inizio', 'ripeti', function () { guardaJf(it, { ritorno: riapriScheda(x), daCapo: true }); }, '', true));
     if (s.trailer) pp.appendChild(pulsante('Trailer', 'trailer', function () { guardaTrailerJf(x); }));
+    pp.appendChild(pulsanteQualita(x));
     pp.appendChild(pulsanteStato(s.preferito, 'lista', 'La mia lista', function (b) { cambiaPreferito(x, b); }));
     pp.appendChild(pulsanteStato(s.visto, 'spunta', 'Visto', function (b) { cambiaVisto(x, b); }));
     restaIn($('sc-resta'), ripr && s.durata ? s.punto / (s.durata * 60) : -1, ripr && s.durata ? s.durata * 60 - s.punto : 0);
@@ -1936,6 +1942,38 @@
     i.appendChild(b);
     box.appendChild(i);
     box.appendChild(document.createTextNode('Mancano ' + durataResta(sec)));
+  }
+  // la qualita' dei film di Jellyfin scelta prima di partire (richiesta del 31/10: «posso scegliere la qualità prima di far partire il
+  // video?»): la stessa del pannello del lettore, salvata nelle preferenze come lì, così vale anche per i film dopo
+  function nomeQualitaScelta() {
+    var q = qualitaBuona(prefs.qualita);
+    return (QUALITA_JF.filter(function (z) { return z.id === q; })[0] || QUALITA_JF[0]).nome;
+  }
+  function pulsanteQualita(x) {
+    var b = pulsante('Qualità', 'ingranaggio', function () { scegliQualita(x, b); }, nomeQualitaScelta());
+    return b;
+  }
+  // solo quelle che il TV regge (sotto il suo tetto, più quella già scelta); un film HDR convertito dal server esce senza HDR
+  function scegliQualita(x, b) {
+    var q0 = qualitaBuona(prefs.qualita), scelta = 0, ms = x.it ? JF.sorgente(x.it) : null, v0 = ms ? JF.flussi(ms, 'Video')[0] : null;
+    var hdr = !!(v0 && hdrDi(v0.VideoRangeType || v0.VideoRange)), mbFilm = ms && ms.Bitrate ? ms.Bitrate / 1e6 : 0;
+    var voci = QUALITA_JF.filter(function (q) { return !q.mbps || q.mbps <= tettoTv.mbps || q.id === q0; });
+    var azioni = voci.map(function (q, i) {
+      if (q.id === q0) scelta = i;
+      var piccolo = q.id === 'orig' ? 'il video così com\'è' : q.piccolo;
+      if (hdr && q.mbps && (!mbFilm || mbFilm > q.mbps)) piccolo += ' · senza HDR';
+      return { testo: q.nome + (q.id === q0 ? ' ✓' : ''), piccolo: piccolo, fn: function () {
+        prefs.qualita = q.id;
+        salvaPrefs();
+        chiudiFermo();
+        var p = b.querySelector('small');
+        if (p) p.textContent = q.nome;
+        evidenzia();
+        messaggio('Qualità: ' + q.nome + ', anche per i prossimi film');
+      } };
+    });
+    azioni.push({ testo: 'Indietro', fn: function () { chiudiFermo(); evidenzia(); } });
+    fermo('Qualità', 'Con quale qualità partono i film di Jellyfin. Resta anche per i prossimi.', azioni, { lista: true, scelta: scelta });
   }
   // un pulsante tondo acceso/spento (La mia lista, visto): la scritta compare sotto quando e' scelto
   function pulsanteStato(acceso, ic, testo, fn) {
@@ -2099,6 +2137,7 @@
       x.guarda = function () { guardaJf(x.puntate[0], { ritorno: riapriScheda(x) }); };
       pp.appendChild(pulsante('Guarda', 'play', x.guarda, 'S' + JF.scheda(x.puntate[0]).stagione + ' E1'));
     } else x.guarda = null;
+    if (x.guarda) pp.appendChild(pulsanteQualita(x));
     pp.appendChild(pulsanteStato(x.s.preferito, 'lista', 'La mia lista', function (b) { cambiaPreferito(x, b); }));
     disegnaSimili(x);
     righeScheda(x);
