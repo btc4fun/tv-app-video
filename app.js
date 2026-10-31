@@ -486,8 +486,9 @@
   // il trailer dietro la scheda (un secondo video da decodificare, che passa dal servizio): spento su tutti i TV finche' non e'
   // provato sul TV vero. Su un Samsung del 2022 il servizio cadeva quando partiva un video (30/10): niente video che partono da soli
   var TRAILER_DIETRO = false;
+  // videoDiretto: i film di Jellyfin dal Mac al lettore senza passare dal servizio del TV (prova, Altro › Video diretto dal Mac)
   var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: false,
-    anteprimeScelte: false };
+    anteprimeScelte: false, videoDiretto: false };
   var punti = {}; // chiave -> { d, p, dim, nome, t, dur, quando, finito }
   var cartelle = {}; // "disco|cartella" -> { a: lingua dell'audio, s: lingua dei sottotitoli o 'no', quando }: le puntate
   function leggiMemoria() {
@@ -1682,6 +1683,9 @@
     carta('tetto', 'ingranaggio', 'Tetto del TV', tm.tetto,
       'Quanti Mbps il TV regge senza scatti: oltre, l\'app avvisa e il Mac toglie i picchi.', apriTetto);
     carta('velocita', 'audio', 'Velocità del TV', 'per l\'audio DTS', 'Quanto è veloce questo TV per convertire da solo l\'audio DTS e TrueHD.', misuraVelocita);
+    // (solo se il servizio del TV lo sa fare: con la home non ancora aggiornata la carta non c'e')
+    if (jfAttivo() && st.diretto) carta('diretto', 'mac', 'Video diretto dal Mac', prefs.videoDiretto ? 'acceso · prova' : 'spento',
+      'Prova: i film di Jellyfin arrivano al lettore direttamente dal Mac e il servizio del TV resta quasi fermo. Se non va, il film riparte da solo come sempre, dallo stesso punto.', cambiaDiretto);
     if (TRAILER_DIETRO) carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', 'Il trailer parte da solo, senza audio, dietro la scheda del film.', function () {
       prefs.anteprime = !prefs.anteprime;
       prefs.anteprimeScelte = true;
@@ -1689,6 +1693,20 @@
       messaggio(prefs.anteprime ? 'Anteprime accese: il trailer parte da solo, senza audio' : 'Anteprime spente');
       disegnaInizio('tieni');
     });
+  }
+  // l'interruttore del video diretto: acceso, si dice subito se il ponte del Mac risponde (spento o assente: film come sempre)
+  function cambiaDiretto() {
+    prefs.videoDiretto = !prefs.videoDiretto;
+    salvaPrefs();
+    direttoBloccato = '';
+    direttoVia = '';
+    direttoTempi = 0;
+    disegnaInizio('tieni');
+    if (!prefs.videoDiretto) { messaggio('Video diretto spento: i film passano dal TV come sempre'); return; }
+    messaggio('Video diretto acceso: controllo il Mac…');
+    chiedi('jf/diretto-ponte').then(function (r) {
+      messaggio(r && r.pronto ? 'Video diretto acceso: il Mac è pronto' : 'Video diretto acceso, ma il Mac non risponde: i film vanno come sempre', 5000);
+    }, function () { messaggio('Video diretto acceso: i film vanno dal Mac quando è pronto', 4000); });
   }
   // le scritte delle carte del limitatore e del tetto in Altro
   function testiAltro() {
@@ -3407,6 +3425,8 @@
       salvaTimer = setInterval(function () {
         if (L !== x) return;
         giri++;
+        vegliaMeta(x);
+        if (L !== x) return;
         // Jellyfin vuole l'avanzamento ogni 10 secondi (passa dalla rete); la memoria dell'app e Continua a guardare della home
         // (scritture sulla memoria flash del TV) solo ogni minuto, piu' a pausa, salto e uscita
         if (!v.paused) { if (giri % 6 === 0) salvaPunto(false); else if (x.jf) riportaJf('avanti', v.currentTime - (x.spost || 0)); }
@@ -3429,6 +3449,10 @@
     var x = L;
     x.partito = false;
     x.daQui = da || 0;
+    // (per il video diretto: il punto chiesto, e l'orologio della veglia a meta' film che riparte da qui)
+    x.daCarica = da || 0;
+    x.dirUltimoT = da || 0;
+    x.dirFermoDa = Date.now();
     if (dopoPlay) { v.removeEventListener('playing', dopoPlay); dopoPlay = null; }
     if (restaInPausa) {
       dopoPlay = function () { v.removeEventListener('playing', dopoPlay); dopoPlay = null; v.pause(); };
@@ -3444,6 +3468,7 @@
     var p = v.play();
     if (p && p.then) p.then(null, function () {});
     mostraOsd();
+    if (usaDiretto(x)) vegliaDiretto(x);
   }
   v.addEventListener('loadedmetadata', function () {
     if (!L) return;
@@ -3482,7 +3507,7 @@
     if (!x || schermo !== 'lettore' || x.uscito) return;
     if (chiusa) x.uscito = true;
     salvaPunto(true, false, chiusa);
-    if (chiusa && x.jf) fermaConversione(x.jf);
+    if (chiusa && x.jf) { fermaConversione(x.jf); fineDirettoJf(x.jf); }
   }
   window.addEventListener('hometvchiudi', function () { salvaUscendo(true); });
   window.addEventListener('pagehide', function () { salvaUscendo(true); });
@@ -3517,11 +3542,15 @@
     chiedi('tv/diario', null, { strada: strada, formato: j && j.modo !== 'diretto' && j.modo !== 'file' ? 'hls' : String(i.formato || '').toLowerCase(),
       codec: vv.codec || '', larghezza: vv.largh || 0, altezza: vv.alt || 0, hdr: vv.hdr || '', audio: a.codec || '', mbps: i.mbps || 0,
       picco: i.picchi ? i.picchi.massimo : 0, secondi: Math.round(d.avanti), msPrimo: d.primo, fermate: d.fermate,
-      msFermo: d.msFermo + (d.tFermo ? Date.now() - d.tFermo : 0), salti: d.salti, ritmo: d.muro > 5 ? d.avanti / d.muro : 0, errore: d.errore }).then(null, function () {});
+      msFermo: d.msFermo + (d.tFermo ? Date.now() - d.tFermo : 0), salti: d.salti, ritmo: d.muro > 5 ? d.avanti / d.muro : 0, errore: d.errore,
+      diretto: x.dirInfo || '', dirErrore: x.dirErrore || 0, dirRichieste: x.dirRichieste || 0, dirHttps: x.dirHttps || 0 }).then(null, function () {});
   }
   v.addEventListener('error', function () {
     if (!L || !v.getAttribute('src')) return;
     var codice = v.error ? v.error.code : 0, x = L, t = v.currentTime || x.daQui || 0;
+    // il video diretto dal Mac: un errore riporta alla strada di sempre, dallo stesso punto (prima del film, a volte passando
+    // dall'indirizzo del Mac nel <video>)
+    if (usaDiretto(x)) { erroreDiretto(x); return; }
     diarioDi(x).errore = codice || 9;
     attesa(false);
     if (codice === 2 && x.errori < 2) {
@@ -3560,6 +3589,7 @@
     var t = v.currentTime;
     if (L.ultimoT >= 0 && t > L.ultimoT && t - L.ultimoT < 3) L.guardato += t - L.ultimoT;
     L.ultimoT = t;
+    if (t > 0 && !v.seeking) L.ultimoBuono = t;
     disegnaSotto(t);
     aggiornaSotto(false);
     guardaSigla(t);
@@ -3696,8 +3726,9 @@
   }
   function playPausa(solo) {
     if (!L) return;
-    if (solo === 'play' || (solo !== 'pausa' && v.paused)) { var p = v.play(); if (p && p.then) p.then(null, function () {}); centro('play'); }
-    else { v.pause(); centro('pausa'); }
+    // (pausaVoluta: la pausa chiesta da chi guarda; dopo un errore v.paused non lo dice piu', e il ritorno da solo la rispetta)
+    if (solo === 'play' || (solo !== 'pausa' && v.paused)) { L.pausaVoluta = false; var p = v.play(); if (p && p.then) p.then(null, function () {}); centro('play'); }
+    else { L.pausaVoluta = true; v.pause(); centro('pausa'); }
     mostraOsd();
   }
 
@@ -3818,6 +3849,8 @@
     var q = { q: j.q, t: Math.round(t || 0), ms: j.ms || undefined };
     if (j.q === 'auto') q.mbps = j.mbps || undefined;
     if (a !== undefined && a !== null) q.a = a;
+    var vuole = vuoleDiretto(x);
+    if (vuole) q.diretto = 1;
     return chiedi('jf/guarda/' + j.id, q).then(function (g) {
       j.g = g;
       j.modo = g.modo;
@@ -3825,6 +3858,10 @@
       j.ms = g.ms;
       j.sessione = g.sessione;
       j.partito = false;
+      // il video diretto dal Mac: il biglietto (la strada di sempre resta in j.url, per il ritorno da solo)
+      j.diretto = vuole && g.diretto && /^jf\/diretto\/[0-9a-f]{64}\/./.test(String(g.diretto.url || '')) ? { url: String(g.diretto.url), biglietto: String(g.diretto.biglietto),
+        mac: /^http:\/\/[^\/?#\s]+\/v\/[0-9a-f]{64}\/./.test(String(g.diretto.mac || '')) ? String(g.diretto.mac) : '' } : null;
+      if (vuole && !j.diretto) x.dirInfo = g.direttoNo === 'biglietto' ? 'biglietto' : 'mac';
       var mkv = /^(mkv|webm|matroska)/i.test(g.contenitore || '');
       // le tracce e i sottotitoli dentro il file li legge il servizio dal file vero (anche quando il video arriva in HLS)
       var nostra = g.modo === 'diretto' || mkv ? chiedi('jf/info/' + j.id, { ms: g.ms, lingue: prefs.lingue.join(','), tetto: tettoTv.mbps }).then(null, function () { return null; }) : Promise.resolve(null);
@@ -3855,11 +3892,137 @@
   }
   function urlJf(x) {
     var j = x.jf, b = serv.base + '/api/video/g/' + serv.gettone + '/';
+    // il video diretto: il servizio rimanda al ponte del Mac, e playlist e pezzi arrivano da li' (o l'indirizzo del Mac nel
+    // <video>, se il lettore non segue il rinvio)
+    if (usaDiretto(x)) return (x.provaMac || direttoVia === 'mac') && j.diretto.mac ? j.diretto.mac : b + j.diretto.url;
     if (j.modo !== 'diretto') return b + j.url;
     // il nome col suo tipo nell'indirizzo, come per le chiavette
     var ms = JF.sorgente(j.it), nome = String(ms && ms.Path || 'video.mkv').split(/[\/\\]/).pop().replace(/[?#%]/g, '_');
     return b + 'jf/file/' + j.id + '/' + encodeURIComponent(nome) + '?ms=' + j.ms + '&a=' + (x.audio || 0);
   }
+
+  /* ---------------------------------------------------------- il video diretto dal Mac (prova)
+   * Con l'interruttore acceso (Altro › Video diretto dal Mac) playlist e pezzi del film vanno dal ponte del Mac al lettore,
+   * senza passare dal servizio del TV: il servizio da' il biglietto e il primo rinvio, poi resta quasi fermo. Tutto il
+   * resto (qualita', lingua, salti, anteprime, sottotitoli, avanzamento, telefono) e' come sempre. Il film non resta mai
+   * fermo per questo: errore del lettore, nessuna domanda arrivata al Mac in 4 s, nessun dato nuovo e niente film a 10 s,
+   * niente film in 30 s o fermo 25 s a meta' film, e si torna da soli alla strada di sempre dallo stesso punto. Se il video diretto non parte, per questa apertura
+   * dell'app non si riprova (direttoBloccato); il motivo va nel diario del lettore (8091/tv).
+   * Il <video> chiede prima al servizio, che rinvia al Mac (302). Se il servizio ha rinviato ma al Mac non e' arrivato niente
+   * (un lettore che non segue i rinvii), una volta si prova l'indirizzo del Mac direttamente nel <video>; se va, per questa
+   * apertura dell'app si usa quello (direttoVia). */
+  var direttoBloccato = '', direttoVia = '', direttoTempi = 0;
+  function vuoleDiretto(x) { return !!(prefs.videoDiretto && x && x.jf && !x.jf.trailer && !x.direttoNo && !direttoBloccato); }
+  function usaDiretto(x) { var j = x && x.jf; return !!(j && j.diretto && !x.direttoNo && j.modo !== 'diretto' && j.modo !== 'mac'); }
+  // il biglietto non serve piu' (film chiuso, qualita' o lingua cambiate, limitatore, puntata dopo): si chiude sul Mac
+  function fineDirettoJf(j) {
+    if (!j || !j.diretto) return;
+    chiedi('jf/diretto-fine/' + j.diretto.biglietto, null, {}).then(null, function () {});
+    j.diretto = null;
+  }
+  // perche' il video diretto non e' partito, da quello che ha visto il Mac: nessuna domanda arrivata (il motore del TV non
+  // l'ha fatta, o l'ha portata a https), o arrivate ma il lettore non va
+  // (domande arrivate ma rifiutate dal Mac, per esempio da un altro indirizzo del TV: non e' il motore che blocca)
+  function motivoDiretto(s) { return !s || !s.mac ? 'mac' : !s.richieste ? (s.https > 0 ? 'https' : s.rifiutate > 0 ? 'errore' : 'bloccato') : 'errore'; }
+  // da che punto si riparte: prima del via quello chiesto a carica(); dopo, il tempo del film (o l'ultimo buono, se il lettore
+  // dopo un errore l'ha rimesso a 0)
+  function puntoDiretto(x) { return x.partito ? (v.currentTime > 0 ? v.currentTime : x.ultimoBuono || x.daCarica || 0) : x.daCarica || 0; }
+  // lo stato visto dal Mac, chiesto al servizio. Se il servizio non risponde o non conosce piu' il biglietto (caduto o
+  // ripartito) del Mac non si sa niente: null
+  function statoDiretto(k) { return chiedi('jf/diretto-stato/' + k).then(function (s) { return s && typeof s === 'object' && 'mac' in s ? s : null; }, function () { return null; }); }
+  // l'indirizzo del Mac direttamente nel <video>, una volta per film: non passa dal servizio
+  function provaMac(x) {
+    if (x.provaMac || direttoVia === 'mac' || !x.jf.diretto.mac) return false;
+    x.provaMac = true;
+    carica(x.daCarica || 0, !!x.pausaVoluta);
+    return true;
+  }
+  // prima del film: cosa fare con quello che ha visto il Mac (s), o senza saperlo (s = null). Rinviato dal servizio ma nessuna
+  // domanda al Mac: forse il lettore non segue i rinvii, una volta l'indirizzo del Mac. Non si sa niente: dopo un errore del
+  // lettore una volta l'indirizzo del Mac; senza errore si aspetta ancora il film (restano i 30 s)
+  function decidiDiretto(x, s, errore) {
+    if (!s) {
+      if (errore && !provaMac(x)) ritornoDiretto(x, 'servizio');
+      return;
+    }
+    var mo = motivoDiretto(s);
+    if (mo === 'bloccato' && s.rinvii > 0 && provaMac(x)) return;
+    ritornoDiretto(x, mo, s);
+  }
+  function vegliaDiretto(x) {
+    var j = x.jf, k = j.diretto.biglietto, giro = x.giroDiretto = (x.giroDiretto || 0) + 1, ancora = 1;
+    function vivo() { return L === x && x.jf === j && usaDiretto(x) && j.diretto.biglietto === k && x.giroDiretto === giro && !x.partito; }
+    // a 4 s cosa ha visto il Mac. Il lettore non ha chiesto niente nemmeno al servizio: e' solo lento, si riguarda a 8 s e poi si
+    // aspetta il film. Le domande arrivano al Mac: 6 s dopo, se nessun byte in piu', il Mac non sta aspettando Jellyfin e niente
+    // film, la strada di sempre. Se lo stato non si legge si aspetta
+    function guarda() {
+      if (!vivo()) return;
+      statoDiretto(k).then(function (s) {
+        if (!vivo() || !s) return;
+        // (con l'indirizzo del Mac nel <video> il servizio non rinvia: li' niente al Mac vuol dire bloccato)
+        if (s.mac && !s.richieste && !s.rinvii && !x.provaMac && direttoVia !== 'mac') { if (ancora-- > 0) setTimeout(guarda, 4000); return; }
+        if (motivoDiretto(s) !== 'errore') { decidiDiretto(x, s, false); return; }
+        var byte0 = s.byte;
+        setTimeout(function () {
+          if (!vivo()) return;
+          statoDiretto(k).then(function (s2) { if (vivo() && !x.pausaVoluta && s2 && s2.mac && s2.byte <= byte0 && !(s2.attese > 0)) ritornoDiretto(x, 'tempo', s2); });
+        }, 6000);
+      });
+    }
+    setTimeout(guarda, 4000);
+    // a 30 s senza film (in pausa voluta prima del via non si conta): la strada di sempre; ma col servizio che non risponde
+    // prima una volta l'indirizzo del Mac
+    setTimeout(function () {
+      if (!vivo() || x.pausaVoluta) return;
+      statoDiretto(k).then(function (s) {
+        if (!vivo()) return;
+        if (!s && provaMac(x)) return;
+        ritornoDiretto(x, s ? 'tempo' : 'servizio', s);
+      });
+    }, 30000);
+  }
+  // un errore del lettore col video diretto: a meta' film subito la strada di sempre; prima del film decide quello che ha
+  // visto il Mac (e la veglia di prima non decide piu')
+  function erroreDiretto(x) {
+    x.dirErrore = v.error ? v.error.code : 9;
+    if (x.partito) { ritornoDiretto(x, 'meta'); return; }
+    var j = x.jf, k = j.diretto.biglietto, giro = x.giroDiretto = (x.giroDiretto || 0) + 1;
+    function vivo() { return L === x && x.jf === j && usaDiretto(x) && j.diretto.biglietto === k && x.giroDiretto === giro; }
+    statoDiretto(k).then(function (s) { if (vivo()) decidiDiretto(x, s, true); });
+  }
+  // si torna alla strada di sempre (i pezzi dal servizio del TV), dallo stesso punto e come si era (in pausa solo se l'aveva
+  // chiesta chi guarda). s = lo stato visto dal Mac, per il diario
+  function ritornoDiretto(x, motivo, s) {
+    var j = x.jf, k = j && j.diretto ? j.diretto.biglietto : '', mac = j && j.diretto && j.diretto.mac;
+    if (!usaDiretto(x)) return;
+    x.direttoNo = motivo;
+    x.dirInfo = motivo;
+    if (s && s.mac) { x.dirRichieste = s.richieste; x.dirHttps = s.https; }
+    // il motore del TV non lo fa partire (https; o niente al Mac anche con l'indirizzo del Mac nel <video>), e lo dice il Mac:
+    // per questa apertura dell'app i film vanno subito dalla strada di sempre. Il Mac lento a partire: solo alla seconda volta.
+    // Gli altri motivi (errore, Mac o servizio che non rispondono, a meta' film) valgono solo per questo film
+    if (s && s.mac && (motivo === 'https' || (motivo === 'bloccato' && (x.provaMac || direttoVia === 'mac' || (!mac && s.rinvii > 0))))) direttoBloccato = motivo;
+    if (motivo === 'tempo' && ++direttoTempi >= 2) direttoBloccato = motivo;
+    fineDirettoJf({ diretto: { biglietto: k } });
+    carica(puntoDiretto(x), !!x.pausaVoluta);
+  }
+  // a meta' film, ogni 10 s (salvaTimer): col video diretto il tempo del film fermo per 25 s (Mac addormentato, Wi-Fi caduto,
+  // ponte piantato: il lettore del TV puo' non dire niente, e 'waiting' non sempre arriva) -> la strada di sempre dallo stesso
+  // punto. La pausa, la fine e la pagina nascosta non contano; copre anche un salto che non finisce mai
+  function vegliaMeta(x) {
+    var ora = Date.now();
+    if (!usaDiretto(x) || !x.partito || v.paused || v.ended || document.hidden || Math.abs(v.currentTime - (x.dirUltimoT || 0)) > 0.5) {
+      x.dirUltimoT = v.currentTime;
+      x.dirFermoDa = ora;
+      return;
+    }
+    if (ora - (x.dirFermoDa || ora) >= 25000) ritornoDiretto(x, 'meta');
+  }
+  v.addEventListener('playing', function () {
+    if (!L || !usaDiretto(L)) return;
+    L.dirInfo = (L.provaMac || direttoVia === 'mac') && L.jf.diretto.mac ? 'si2' : 'si';
+    if (L.provaMac) direttoVia = 'mac';
+  });
   // a Jellyfin: si guarda (inizio), a che punto (avanti, ogni 10 s e a pausa e salti), smesso (fine)
   function riportaJf(evento, t) {
     var x = L, j = x && x.jf;
@@ -3890,12 +4053,13 @@
   function ricaricaJf(opz) {
     var x = L;
     if (!x || !x.jf) return;
-    var t = v.currentTime || x.daQui || 0, pausa = v.paused, vecchio = { modo: x.jf.modo, sessione: x.jf.sessione };
+    var t = v.currentTime || x.daQui || 0, pausa = v.paused, vecchio = { modo: x.jf.modo, sessione: x.jf.sessione, diretto: x.jf.diretto };
     riportaJf('fine', t);
     attesa(true);
     stradaJf(x, t, opz.a).then(function (info) {
       if (L !== x) return;
       fermaConversione(vecchio);
+      fineDirettoJf(vecchio);
       x.info = info;
       x.audio = info.scelta && info.scelta.audio !== undefined && info.scelta.audio !== null ? info.scelta.audio : 0;
       j_tp(x);
@@ -3955,6 +4119,7 @@
     var j = x.jf, t = v.currentTime || x.daQui || 0, pausa = v.paused;
     riportaJf('fine', t);
     fermaConversione({ modo: j.modo, sessione: j.sessione });
+    fineDirettoJf(j);
     j.modo = 'mac';
     j.url = r.url;
     disegnaBadgeOsd();
@@ -4550,6 +4715,7 @@
   function vaiA(voce) {
     salvaPunto(true);
     var x = L;
+    if (x && x.jf) fineDirettoJf(x.jf);
     apriVideo(voce, { vicini: x ? x.vicini : null, cartella: x ? x.cartella : null, sotto: x ? x.esterni : [], ritorno: x ? x.ritorno : 'inizio' });
   }
 
@@ -4622,6 +4788,7 @@
     var r = x ? x.ritorno : 'inizio';
     if (x && x.jf) {
       fermaConversione(x.jf);
+      fineDirettoJf(x.jf);
       jf.caricato = 0;
       // la barra e il segno di visto anche nelle file tenute 10 minuti (collezioni, Film, Serie)
       aggiornaVoceLenti(x.jf.id);
