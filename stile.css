@@ -11,12 +11,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #08090d; col
 /* (la pagina si sposta senza animazione: animarla faceva nascere decine di strati sul TV a ogni freccia) */
 .corpo { position: absolute; left: 0; top: 0; width: 100vw; }
 
-/* ---------- lo sfondo: l'immagine del film scelto (due strati che si danno il cambio), sopra un velo solo che cambia col modo
-   (banner, file, scheda) senza animazioni: sfumature e grana nello stesso elemento. Sul TV ogni strato animato a schermo intero
-   costa memoria della scheda video (8 MB l'uno): si anima solo la dissolvenza tra due immagini */
+/* ---------- lo sfondo: l'immagine del film scelto (due strati che si danno il cambio, il nuovo sopra il vecchio), sopra un
+   velo solo che cambia col modo (banner, file, scheda) senza animazioni: sfumature e grana nello stesso elemento. Sul TV ogni
+   strato animato a schermo intero costa memoria della scheda video (8 MB l'uno): niente dissolvenze qui (31/10) */
 #sfondo { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; overflow: hidden; background: #08090d; }
 #sfondo .strato { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; background-size: cover; background-position: center 25%;
-  opacity: 0; transition: opacity .6s ease; }
+  opacity: 0; }
 #sfondo .strato.on { opacity: 1; }
 /* sfocato: la copertina piccola (32x18) ingrandita, quando il film non ha uno sfondo */
 #sfondo .strato.sfocato { left: -4vw; top: -4vh; width: 108vw; height: 108vh; }
@@ -93,13 +93,16 @@ svg.ic.pieno { fill: currentColor; stroke: none; }
 .sezione { position: relative; margin: 0 0 4.6vh 7.6vw; }
 .sezione h2 { margin: 0 0 1.6vh; font-size: 2.45vh; font-weight: 600; letter-spacing: -.005em; color: rgba(244, 242, 237, .94); white-space: nowrap; }
 .sezione h2 small { margin-left: 1.2vh; font-size: 1.9vh; font-weight: 500; color: rgba(244, 242, 237, .5); }
-.sezione.sopra { opacity: 0; }
+/* le file sopra e le carte a sinistra della scelta si nascondono con visibility, non con opacity 0: con opacity Chromium
+   componeva carte, ombre (::before), anelli (::after), sezioni, banner e binario in livelli loro (34 invece di 5, 26,6 MB
+   invece di 7,9 della scheda video a ogni giro nelle file, misurato il 31/10) */
+.sezione.sopra { visibility: hidden; }
 .fila { position: relative; white-space: nowrap; font-size: 0; transition: transform .34s cubic-bezier(.22, .8, .22, 1); }
 .fila.virtuale { height: 15.9vw; }
 .fila.virtuale.f-oriz { height: 11.925vw; }
 .fila.virtuale.f-puntata { height: 22.6vw; }
 .fila.virtuale > * { position: absolute; top: 0; }
-.fila > .prima { opacity: 0; }
+.fila > .prima { visibility: hidden; }
 .fila > .carta, .fila > .persona { transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .badge { display: inline-block; margin: 0 1vh 1vh 0; padding: 0 1vh; height: 3.2vh; border-radius: .55vh; box-shadow: inset 0 0 0 .17vh rgba(244, 242, 237, .38);
   font-size: 1.75vh; font-weight: 600; line-height: 3.2vh; letter-spacing: .02em; color: rgba(244, 242, 237, .9); }
@@ -172,6 +175,8 @@ svg.ic.pieno { fill: currentColor; stroke: none; }
 .finta .fa { position: absolute; left: 9%; bottom: 8%; font-size: 1.75vh; font-weight: 600; color: rgba(244, 242, 237, .6); }
 .carta.oriz .finta .ft { font-size: 2.6vh; right: 30%; }
 .carta.oriz .finta .fa, .carta.oriz .finta .ico { display: none; }
+/* mentre arriva la copertina vera: i suoi colori (dal BlurHash di Jellyfin), senza scritte. Se non arriva torna il titolo */
+.sfuma .finta .ft, .sfuma .finta .fa, .sfuma .finta .ico { visibility: hidden; }
 
 /* ---------- inizio */
 #inizio-corpo { padding-top: 15vh; }
@@ -225,15 +230,6 @@ svg.ic.pieno { fill: currentColor; stroke: none; }
 .resta i { display: inline-block; vertical-align: middle; width: 13vw; height: .5vh; margin-right: 1.4vh; border-radius: .25vh; background: rgba(244, 242, 237, .22); overflow: hidden; }
 .resta i b { display: block; height: 100%; background: #f2b544; }
 
-/* la prima entrata: il banner sale piano, le file dopo */
-.entra #eroe .dentro > * { -webkit-animation: sale .6s cubic-bezier(.2, .8, .2, 1) both; animation: sale .6s cubic-bezier(.2, .8, .2, 1) both; }
-.entra #eroe .dentro > *:nth-child(2) { -webkit-animation-delay: .07s; animation-delay: .07s; }
-.entra #eroe .dentro > *:nth-child(3) { -webkit-animation-delay: .14s; animation-delay: .14s; }
-.entra #eroe .dentro > *:nth-child(4) { -webkit-animation-delay: .21s; animation-delay: .21s; }
-.entra #eroe-pulsanti { -webkit-animation: sale .6s .28s cubic-bezier(.2, .8, .2, 1) both; animation: sale .6s .28s cubic-bezier(.2, .8, .2, 1) both; }
-.entra #sez-continua, .entra #jf-righe > .sezione:first-child { -webkit-animation: sale .7s .36s cubic-bezier(.2, .8, .2, 1) both; animation: sale .7s .36s cubic-bezier(.2, .8, .2, 1) both; }
-@-webkit-keyframes sale { from { opacity: 0; -webkit-transform: translateY(2.4vh); } to { opacity: 1; -webkit-transform: translateY(0); } }
-@keyframes sale { from { opacity: 0; transform: translateY(2.4vh); } to { opacity: 1; transform: translateY(0); } }
 
 /* senza Jellyfin: "Guarda i film del tuo Mac" col codice da scrivere sul Mac */
 #benvenuto { position: relative; margin: 0 0 6vh 7.6vw; min-height: 52vh; }

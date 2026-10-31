@@ -317,7 +317,7 @@
   // le immagini di Jellyfin: ridotte dal server alla misura giusta e tenute dal browser (il ponte le da' per un giorno), quindi
   // niente tela: un <img> che compare quando e' pronto. Al massimo quattro in volo, prima le ultime chieste (le frecce tenute
   // premute non riempiono la coda di copertine gia' passate)
-  var dritte = { coda: [], inVolo: 0 };
+  var dritte = { coda: [], inVolo: 0 }, apertaAlle = Date.now();
   // il riquadro sta in una carta che ha lasciato andare le sue immagini (lontana dalla scelta, o la pagina sotto il lettore)
   function lontano(box) {
     for (var e = box; e && e !== document.body; e = e.parentNode) {
@@ -331,7 +331,8 @@
     setTimeout(prossimaDritta, 0); // al giro dopo: chi l'ha chiesta intanto mette la casella nella pagina
   }
   function prossimaDritta() {
-    while (dritte.inVolo < 4 && dritte.coda.length) {
+    // (nei primi 3 s dopo l'apertura due alla volta: 31/10, il TV chiudeva il servizio entro un secondo dall'apertura)
+    while (dritte.inVolo < (Date.now() - apertaAlle < 3000 ? 2 : 4) && dritte.coda.length) {
       var x = dritte.coda.pop();
       if (!x.box.parentNode || !document.body.contains(x.box) || lontano(x.box)) { if (x.poi) x.poi(false); continue; }
       dritte.inVolo++;
@@ -387,6 +388,20 @@
     var f = c.querySelectorAll('.finta');
     for (var j = 0; j < f.length; j++) f[j].style.opacity = '';
   }
+  // mentre l'immagine di Jellyfin arriva (o dopo che la carta l'ha lasciata andare): i colori della copertina vera, dal suo
+  // BlurHash, al posto della copertina disegnata col titolo. Solo CSS: niente immagini da decodificare
+  function sfuma(box, ref) {
+    var c = ref && ref.jf && ref.jf.blur ? JF.coloriBlur(ref.jf.blur, 3) : null, f = box.querySelector('.finta');
+    if (!c || !f) return;
+    f.style.backgroundImage = 'linear-gradient(180deg, ' + c[0] + ' 0%, ' + c[1] + ' 50%, ' + c[2] + ' 100%)';
+    box.className += ' sfuma';
+  }
+  // l'immagine e' arrivata (la copertina disegnata sparisce) o no: se la carta e' ancora vicina, torna il titolo
+  function arrivata(box, si) {
+    var f = box.querySelector('.finta');
+    if (si) { if (f) f.style.opacity = '0'; }
+    else if (!lontano(box)) box.className = box.className.replace(/\s*\bsfuma\b/, '');
+  }
   // la copertina disegnata: titolo pulito, anno, un colore spento dal nome (mai un riquadro grigio)
   function finta(titolo, anno, tipo) {
     var c = el('div', 'finta'), h = tinta(titolo);
@@ -400,7 +415,7 @@
   /* ---------------------------------------------------------- lo sfondo */
 
   var sfondoChiave = null, sfondoA = true, sfondoTimer = null;
-  // nitido: l'immagine grande del film (Jellyfin 1280x720, le chiavette 960x540); se no la copertina della voce scelta,
+  // nitido: l'immagine grande del film (960x540, da Jellyfin e dalle chiavette); se no la copertina della voce scelta,
   // sfocata (32x18 ingrandita)
   function sfondo(d, ref, nitido, subito) {
     var k = ref ? d + '|' + ref.p + '|' + ref.k + '|' + (nitido ? 1 : 0) : '';
@@ -408,29 +423,60 @@
     sfondoChiave = k;
     clearTimeout(sfondoTimer);
     if (!ref) { mettiSfondo(null, ''); return; }
-    // con le frecce tenute premute: solo quando ci si ferma
+    // con le frecce tenute premute: solo quando ci si ferma. Nelle file e nella griglia dopo una sosta vera (700 ms): ogni
+    // sfondo nuovo e' un'immagine da decodificare che il TV tiene in cache, e scorrendo se ne accumulavano decine (31/10: la
+    // memoria libera del TV scendeva da 70 a 20 MB in cinque minuti). Sul banner e nella scheda subito
     sfondoTimer = setTimeout(function () {
       if (ref.jf && nitido && serv.gettone) {
-        // l'immagine si scarica prima, poi passa sopra la vecchia con una dissolvenza
-        var url = urlImmagine('', ref, 1280, 720, false), im = new Image();
-        im.onload = function () { if (sfondoChiave === k) mettiSfondo(url, 'nitido'); };
-        im.onerror = function () { if (sfondoChiave === k) mettiSfondo(null, ''); };
-        im.src = url;
+        // 960x540 come nella prima versione (2 MB decodificati, 1280x720 ne prendeva 3,5): sotto i veli non si vede la differenza
+        immagineDati(urlImmagine('', ref, 960, 540, false), function (dati) { if (sfondoChiave === k) mettiSfondo(dati, dati ? 'nitido' : ''); });
         return;
       }
       piccola(d, ref, nitido ? 960 : 32, nitido ? 540 : 18, function (url) { if (sfondoChiave === k) mettiSfondo(url, nitido ? 'nitido' : 'sfocato'); });
-    }, subito ? 0 : 260);
+    }, subito ? 0 : $('sfondo').className === 'eroe' ? 260 : 700);
+  }
+  // un'immagine del ponte come data: URL (letta con una XHR, i byte del server cosi' come sono: niente da decodificare e
+  // ricodificare). Chromium non tiene in cache le immagini data:, e quando lo sfondo cambia la vecchia si libera davvero; con
+  // l'indirizzo vero ogni sfondo visto restava decodificato in cache (31/10: +105 MB dopo 30 film, la prima versione +25)
+  // (gli ultimi quattro restano come testo, circa 150 KB l'uno, non decodificati: il banner che gira non li riscarica)
+  var datiCache = [];
+  function immagineDati(url, cb) {
+    for (var i = 0; i < datiCache.length; i++) if (datiCache[i].url === url) { cb(datiCache[i].dati); return; }
+    var x = new XMLHttpRequest(), finito = false;
+    function fine(v) {
+      if (finito) return;
+      finito = true;
+      if (v) { datiCache.unshift({ url: url, dati: v }); if (datiCache.length > 4) datiCache.pop(); }
+      cb(v);
+    }
+    try {
+      x.open('GET', url, true);
+      x.responseType = 'blob';
+      x.timeout = 15000;
+      x.onload = function () {
+        if (x.status !== 200 || !x.response || !/^image\//.test(x.response.type || '')) { fine(null); return; }
+        var r = new FileReader();
+        r.onload = function () { fine(typeof r.result === 'string' && r.result.indexOf('data:image/') === 0 ? r.result : null); };
+        r.onerror = function () { fine(null); };
+        r.readAsDataURL(x.response);
+      };
+      x.onerror = x.ontimeout = x.onabort = function () { fine(null); };
+      x.send();
+    } catch (e) { fine(null); }
   }
   var svuotaTimer = null;
+  // lo sfondo cambia senza dissolvenza: animava due strati a pieno schermo piu' il velo, e sul TV ogni strato e' memoria video
+  // (8 MB): 31,6 MB invece di 12 a ogni cambio del banner (31/10). Il nuovo strato va sopra il vecchio, che resta sotto finche'
+  // il nuovo non e' disegnato (niente lampo scuro) e poi lascia andare la sua immagine
   function mettiSfondo(url, tipo) {
     var nuovo = $(sfondoA ? 'sfondo-b' : 'sfondo-a'), vecchio = $(sfondoA ? 'sfondo-a' : 'sfondo-b');
     sfondoA = !sfondoA;
     nuovo.style.backgroundImage = url ? 'url("' + url + '")' : 'none';
+    $('sfondo').insertBefore(nuovo, $('trailer')); // sopra il vecchio, sotto trailer e velo
     nuovo.className = 'strato' + (url ? ' on' : '') + (tipo ? ' ' + tipo : '');
-    vecchio.className = 'strato' + (/sfocato/.test(vecchio.className) ? ' sfocato' : '');
-    // finita la dissolvenza lo strato spento lascia andare la sua immagine (sul TV: una 1280x720 decodificata in meno)
     clearTimeout(svuotaTimer);
-    svuotaTimer = setTimeout(function () { if (!/\bon\b/.test(vecchio.className)) vecchio.style.backgroundImage = 'none'; }, 800);
+    if (!url) { vecchio.className = 'strato'; vecchio.style.backgroundImage = 'none'; return; }
+    svuotaTimer = setTimeout(function () { vecchio.className = 'strato'; vecchio.style.backgroundImage = 'none'; }, 300);
   }
   // come si guarda lo sfondo: eroe (tutta l'immagine), righe (piu' piccola in alto a destra), scheda, piatto (senza immagine)
   function modoSfondo(m) { $('sfondo').className = m; }
@@ -705,12 +751,13 @@
     return Object.keys(punti).map(function (k) { return punti[k]; }).filter(function (x) { return riprendibile(x); })
       .sort(function (a, b) { return b.quando - a.quando; }).slice(0, 12);
   }
-  function apriInizio(scegli) {
+  // dischiDopo: le chiavette le chiede dopo chi apre l'app (vedi HomeTV.pronto)
+  function apriInizio(scegli, dischiDopo) {
     mostra('inizio');
     sfondoChiave = null;
     disegnaInizio(scegli || 'tieni');
     jfCaricaInizio(false);
-    caricaDischi(true);
+    if (!dischiDopo) caricaDischi(true);
     clearInterval(dischiTimer);
     // una chiavetta appena attaccata compare da sola
     dischiTimer = setInterval(function () { if (schermo === 'inizio' && !fermoAperto()) caricaDischi(false); }, 4000);
@@ -820,12 +867,9 @@
     } else if (scegli === 'dischi' || (!vetrina && dischi.length && !blocco)) {
       for (var j = 0; j < pag.righe.length; j++) if (pag.righe[j].chiave === 'dischi') pag.r = j;
     }
+    // (niente animazione d'entrata: banner e file che salivano in dissolvenza nel primo secondo e mezzo raddoppiavano i livelli
+    // della scheda video proprio quando il TV prepara l'app, e il 31/10 il TV ha chiuso il servizio all'apertura di Real4K)
     evidenzia();
-    if (vetrina && !vetr.entrato) {
-      vetr.entrato = true;
-      sch.classList.add('entra');
-      setTimeout(function () { sch.classList.remove('entra'); }, 1500);
-    }
     if (vetrina) vetrinaTimer();
   }
   // un problema che ferma tutto (il permesso, il servizio del TV vecchio o che non risponde): grande al centro. Le chiavette
@@ -972,7 +1016,7 @@
 
   /* ---------------------------------------------------------- il banner: i film arrivati da poco, che cambiano da soli */
 
-  var vetr = { slide: [], k: 0, timer: null, dissolvi: null, entrato: false, giri: 0 };
+  var vetr = { slide: [], k: 0, timer: null, dissolvi: null, giri: 0 };
   // i film nuovi con un'immagine grande (il banner senza immagine e' brutto); se sono pochi, anche le serie
   function slideDi(d) {
     function conSfondo(it) { return !!JF.scheda(it).img.fanart; }
@@ -1315,7 +1359,7 @@
   var mac = { stato: null };
   // il tetto del TV (lo tiene il servizio): oltre questi Mbps il film puo' scattare
   var tettoTv = { scelta: '80', mbps: 80, prova: null, unione: 10 };
-  function caricaTetto() { chiedi('tv/tetto').then(function (r) { if (r && r.mbps > 0) tettoTv = r; }, function () {}); }
+  function caricaTetto(poi) { chiedi('tv/tetto').then(function (r) { if (r && r.mbps > 0) tettoTv = r; if (poi) poi(); }, function () {}); }
   function macAttivo() { return !!(mac.stato && mac.stato.collegato); }
   function macCaricaStato(poi) {
     chiedi('mac/stato').then(function (r) { mac.stato = r; if (poi) poi(); }, function () { mac.stato = null; if (poi) poi(); });
@@ -1492,8 +1536,9 @@
     if (poster) { c.appendChild(nome); c.appendChild(sotto); }
     c.addEventListener('click', function () { if (opz.apri) opz.apri(it); else apriJf(it, { indietro: tornaInizio }); });
     var ref = poster ? s.img.poster : opz.ref || s.img.landscape || s.img.fanart || s.img.poster;
+    sfuma(q, ref);
     c.carica = function () {
-      if (ref) mettiImg(q, '', ref, poster ? 220 : 448, poster ? 330 : 252, false, function (si) { var f0 = q.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
+      if (ref) mettiImg(q, '', ref, poster ? 220 : 448, poster ? 330 : 252, false, function (si) { arrivata(q, si); });
     };
     c.scheda = s;
     c.info = function () { return infoDaScheda(s, ''); };
@@ -1520,20 +1565,38 @@
     c.info = { titolo: testo, meta: [sotto], trama: 'Tutti in griglia: per titolo, anno, voto o data, solo quelli da vedere, per genere.' };
     return c;
   }
-  // le immagini delle carte che si vedono: la fila scelta e quella sotto (nelle pagine semplici anche quella sopra), dopo una
-  // pausa di 200 ms senza tasti (con le frecce tenute premute non si chiedono copertine che non si vedranno)
-  var vicineTimer = null;
+  // le immagini delle carte che si vedono: la fila scelta e quella sotto (nelle pagine semplici anche quella sopra e la seconda
+  // sotto), contando dalla prima carta che si vede. Con le frecce tenute premute si chiedono lo stesso, al massimo ogni 300 ms
+  // (prima le ultime chieste: vedi prossimaDritta); le altre lasciano andare le immagini subito. Niente margine: la memoria
+  // serve al TV (31/10). Mentre una copertina arriva la carta mostra i suoi colori (sfuma). Nel lettore si lasciano tutte
+  var vicineTimer = null, vicineUltima = 0, VICINE_OGNI = 300;
+  // la prima voce che si vede nella fila: di solito la scelta (sta a sinistra), ma in fondo alla fila l'ultima resta attaccata
+  // al bordo destro e si vedono anche quelle prima (come in scorriFila)
+  function primaVisibile(R) {
+    if (!R.box || !/\bfila\b/.test(R.box.className)) return Math.max(0, R.k - 1);
+    var W = window.innerWidth, visibile = W * 0.924, i;
+    if (R.crea) {
+      var passo = W * R.passo, sposta = Math.max(0, Math.min(R.k * passo, R.n * passo - W * 0.0125 - visibile));
+      return Math.max(0, Math.min(R.k, Math.floor(sposta / passo + 0.01)));
+    }
+    var e = R.voci[R.k];
+    if (!e) return Math.max(0, R.k - 1);
+    var x = Math.max(0, Math.min(e.offsetLeft, R.box.scrollWidth - visibile));
+    for (i = R.k; i > 0 && R.voci[i - 1] && R.voci[i - 1].offsetLeft + R.voci[i - 1].offsetWidth > x; i--) { /* indietro */ }
+    return i;
+  }
   function caricaVicine() {
-    clearTimeout(vicineTimer);
-    vicineTimer = setTimeout(caricaVicineOra, 200);
+    if (vicineTimer) return;
+    // (nel primo secondo e mezzo la pagina e' ancora nascosta, vedi attesaFinita: prima arrivano sfondo e logo, poi le copertine)
+    vicineTimer = setTimeout(function () { vicineTimer = null; vicineUltima = Date.now(); caricaVicineOra(); },
+      Math.max(80, vicineUltima + VICINE_OGNI - Date.now(), apertaAlle + 1500 - Date.now()));
   }
   function caricaVicineOra() {
     if (!pag) return;
-    // (nelle pagine semplici, come la scheda, sotto la scelta si vedono anche due file)
     var da = pag.disponi ? pag.r : Math.max(0, pag.r - 1), a = pag.disponi ? pag.r + 1 : pag.r + 2, vicine = [];
     for (var r = da; r <= Math.min(pag.righe.length - 1, a); r++) {
-      var R = pag.righe[r], k0 = pag.disponi && r === pag.r ? R.k : Math.max(0, R.k - 1);
-      for (var k = k0; k < Math.min(quanteIn(R), R.k + 9); k++) {
+      var R = pag.righe[r], p = primaVisibile(R);
+      for (var k = p; k < Math.min(quanteIn(R), p + 9); k++) {
         var c = R.voci[k];
         if (!c) continue;
         vicine.push(c);
@@ -1541,7 +1604,7 @@
       }
     }
     // le altre carte ancora disegnate (la fila sopra, quelle piu' in la') lasciano andare le immagini: sul TV restano
-    // decodificate solo quelle che si vedono, piu' una fila (la memoria serve al 4K del film)
+    // decodificate solo quelle che si vedono (la memoria serve al 4K del film)
     for (var r2 = 0; r2 < pag.righe.length; r2++) {
       var R2 = pag.righe[r2], l = R2.crea ? R2.voci : vociDi(R2.box);
       for (var i in l) {
@@ -1613,9 +1676,10 @@
     carta('jellyfin', 'jellyfin', jfAttivo() ? 'Jellyfin · ' + (st.server.nome || 'server') : 'Collega Jellyfin',
       jfAttivo() ? (jf.errore === 'rete' ? 'non risponde' : 'collegato come ' + st.utente.nome) : 'film e serie dal Mac',
       jfAttivo() ? 'Il Jellyfin del Mac: da qui vedi com\'è collegato, lo scolleghi o cambi Mac.' : 'Collega il Jellyfin del Mac con un codice.', function () { apriCollega(tornaInizio); });
-    if (jfAttivo()) carta('mac', 'picchi', macAttivo() ? 'Senza picchi · Mac' : 'Collega il Mac', macAttivo() ? 'collegato' : 'toglie i picchi dei remux',
+    var tm = testiAltro();
+    if (jfAttivo()) carta('mac', 'picchi', tm.mac[0], tm.mac[1],
       'Il limitatore del Mac toglie i picchi dei film troppo pesanti per il TV, senza toccare il resto.', function () { apriCollegaMac(tornaInizio); });
-    carta('tetto', 'ingranaggio', 'Tetto del TV', tettoTv.mbps + ' Mbps' + (tettoTv.scelta === 'prova' ? ' · misurato' : ''),
+    carta('tetto', 'ingranaggio', 'Tetto del TV', tm.tetto,
       'Quanti Mbps il TV regge senza scatti: oltre, l\'app avvisa e il Mac toglie i picchi.', apriTetto);
     carta('velocita', 'audio', 'Velocità del TV', 'per l\'audio DTS', 'Quanto è veloce questo TV per convertire da solo l\'audio DTS e TrueHD.', misuraVelocita);
     if (TRAILER_DIETRO) carta('anteprime', 'trailer', 'Anteprime nella scheda', prefs.anteprime ? 'accese' : 'spente', 'Il trailer parte da solo, senza audio, dietro la scheda del film.', function () {
@@ -1625,6 +1689,25 @@
       messaggio(prefs.anteprime ? 'Anteprime accese: il trailer parte da solo, senza audio' : 'Anteprime spente');
       disegnaInizio('tieni');
     });
+  }
+  // le scritte delle carte del limitatore e del tetto in Altro
+  function testiAltro() {
+    return { mac: macAttivo() ? ['Senza picchi · Mac', 'collegato'] : ['Collega il Mac', 'toglie i picchi dei remux'],
+      tetto: tettoTv.mbps + ' Mbps' + (tettoTv.scelta === 'prova' ? ' · misurato' : '') };
+  }
+  // limitatore e tetto arrivano dopo l'apertura: le loro carte cambiano scritta al loro posto, senza ridisegnare la pagina
+  function aggiornaAltro() {
+    var tm = testiAltro();
+    function scrivi(chiave, nome, stato) {
+      var c = $('fila-altro').querySelector('[data-chiave="altro:' + chiave + '"]');
+      if (!c) return;
+      var n = c.querySelector('.nome'), s = c.querySelector('.stato');
+      if (n) n.textContent = nome;
+      if (s) s.textContent = stato;
+      if (c.info) c.info.meta = [stato];
+    }
+    if (jfAttivo()) scrivi('mac', tm.mac[0], tm.mac[1]);
+    scrivi('tetto', 'Tetto del TV', tm.tetto);
   }
   // il tetto: 150 sui TV dal 2020 (80 sui 2017-2019), 80, o misurato dal TV col video a scalini del Mac ("Prova da solo")
   function apriTetto() {
@@ -2768,7 +2851,8 @@
     t.addEventListener('click', function () { lib.sel = i; lib.inBarra = false; finestraGriglia(); apriVoce(i); });
     $('griglia-dentro').appendChild(t);
     lib.dom[i] = t;
-    if (s.img.poster) mettiImg(cop, '', s.img.poster, m.pw, m.ph, false, function (si) { var f0 = cop.querySelector('.finta'); if (si && f0) f0.style.opacity = '0'; });
+    sfuma(cop, s.img.poster);
+    if (s.img.poster) mettiImg(cop, '', s.img.poster, m.pw, m.ph, false, function (si) { arrivata(cop, si); });
     return t;
   }
   // visto (spunta) o a meta' (barra)
@@ -4637,11 +4721,15 @@
     // punto della scheda) o dacapo=1; con Indietro si torna alla home
     var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash), mj = /#\/jf\/([0-9a-f]{32})(?:\?(.*))?$/.exec(location.hash);
     prendiPermesso().then(function () {
-      apriInizio();
-      macCaricaStato();
-      caricaTetto();
+      apriInizio(null, true);
+      // all'apertura solo quello che serve alle file (31/10: il TV chiudeva il servizio entro un secondo dall'apertura di Real4K):
+      // il limitatore del Mac e il tetto del TV dopo 4 s, e le loro carte in Altro si aggiornano da sole. Un film che parte
+      // subito (dalla home) li vuole subito
+      if (m || mj) { macCaricaStato(); caricaTetto(); } else setTimeout(function () { macCaricaStato(aggiornaAltro); caricaTetto(aggiornaAltro); }, 4000);
       // Jellyfin: lo stato (server, utente, i codec del TV) e le file dell'inizio; dalla home un film di Jellyfin riparte subito
       jfCaricaStato(function () {
+        // le chiavette: senza Jellyfin sono la pagina, subito; con Jellyfin dopo 3,5 s (poi ogni 4 s, come prima)
+        if (jfAttivo()) setTimeout(function () { caricaDischi(true); }, 3500); else caricaDischi(true);
         jfCaricaInizio('tutto');
         disegnaInizio('tieni');
         if (!mj) return;

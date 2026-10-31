@@ -16,6 +16,38 @@ var JF = (function () {
     if (!id || !tag) return null;
     return { p: 'jf/' + id + '/' + tipo + '/' + (n || 0) + '/' + tag, jf: { id: id, tipo: tipo, tag: tag, n: n || 0 } };
   }
+  // i colori di un'immagine dal suo BlurHash (Jellyfin lo manda con la scheda: poche lettere, niente da scaricare), dall'alto in
+  // basso e mediati in larghezza: n colori CSS, o null se il testo non e' un BlurHash. La carta li mostra mentre l'immagine arriva
+  var B83 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~';
+  function b83(s, da, a) {
+    for (var v = 0, i = da; i < a; i++) { var d = B83.indexOf(s.charAt(i)); if (d < 0) return -1; v = v * 83 + d; }
+    return v;
+  }
+  function lineare(c) { var v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function srgb(v) {
+    v = Math.max(0, Math.min(1, v));
+    return Math.round((v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255);
+  }
+  function coloriBlur(h, n) {
+    h = String(h || '');
+    var dim = h.length >= 6 && b83(h, 0, h.length) >= 0 ? b83(h, 0, 1) : -1, nx = dim % 9 + 1, ny = Math.floor(dim / 9) + 1;
+    if (dim < 0 || h.length !== 4 + 2 * nx * ny || n < 1) return null;
+    var max = (b83(h, 1, 2) + 1) / 166, dc = b83(h, 2, 6), righe = [[lineare(dc >> 16), lineare((dc >> 8) & 255), lineare(dc & 255)]], j, k;
+    if (dc < 0 || max <= 0) return null;
+    // solo le componenti della prima colonna (frequenza 0 in larghezza): la media di ogni riga
+    for (j = 1; j < ny; j++) {
+      var v = b83(h, 4 + 2 * j * nx, 6 + 2 * j * nx);
+      if (v < 0) return null;
+      righe.push([Math.floor(v / 361), Math.floor(v / 19) % 19, v % 19].map(function (q) { var x = (q - 9) / 9; return (x < 0 ? -1 : 1) * x * x * max; }));
+    }
+    var out = [];
+    for (k = 0; k < n; k++) {
+      var t = n === 1 ? 0.5 : 0.05 + 0.9 * k / (n - 1), c = [0, 0, 0];
+      for (j = 0; j < ny; j++) { var b = Math.cos(Math.PI * t * j); c[0] += righe[j][0] * b; c[1] += righe[j][1] * b; c[2] += righe[j][2] * b; }
+      out.push('rgb(' + srgb(c[0]) + ',' + srgb(c[1]) + ',' + srgb(c[2]) + ')');
+    }
+    return out;
+  }
   // la domanda per l'immagine, alla misura che serve (Jellyfin la riduce: al TV arriva piccola). tutta = logo (proporzioni sue)
   function percorsoImmagine(r, w, h, tutta) {
     var j = r.jf, q = 'tag=' + encodeURIComponent(j.tag) + '&quality=' + (w * h > 400000 ? 80 : 85);
@@ -45,6 +77,12 @@ var JF = (function () {
       if (tag.Thumb) img.landscape = ref(it.Id, 'Thumb', tag.Thumb);
       else if (it.ParentThumbItemId && it.ParentThumbImageTag) img.landscape = ref(it.ParentThumbItemId, 'Thumb', it.ParentThumbImageTag);
     }
+    // il BlurHash di ogni immagine (per tipo e tag: c'e' anche quello del poster della serie di una puntata)
+    var bh = it.ImageBlurHashes || {};
+    [img.poster, img.landscape, img.fanart].forEach(function (r) {
+      var l = r && bh[r.jf.tipo];
+      if (l && typeof l[r.jf.tag] === 'string') r.jf.blur = l[r.jf.tag].slice(0, 200);
+    });
     var ud = it.UserData || {}, people = it.People || [];
     var s = {
       tipo: tipo, id: it.Id, titolo: String(it.Name || ''), anno: +it.ProductionYear || 0, durata: sec(it.RunTimeTicks) / 60,
@@ -221,7 +259,7 @@ var JF = (function () {
   var CAMPI = 'PrimaryImageAspectRatio,Overview,Genres,OfficialRating,CommunityRating,ChildCount,DateCreated';
   var IMMAGINI = 'EnableImageTypes=Primary,Backdrop,Thumb,Logo&ImageTypeLimit=1&EnableUserData=true';
 
-  return { TICK: TICK, sec: sec, ticks: ticks, ref: ref, percorsoImmagine: percorsoImmagine, scheda: scheda, trickplay: trickplay,
+  return { TICK: TICK, sec: sec, ticks: ticks, ref: ref, coloriBlur: coloriBlur, percorsoImmagine: percorsoImmagine, scheda: scheda, trickplay: trickplay,
     tessera: tessera, segmenti: segmenti, badge: badge, etichette: etichette, nomeVideo: nomeVideo, ordinaCollezioni: ordinaCollezioni, strada: strada, videoOk: videoOk, capitoli: capitoli, famiglia: famiglia, nomeAudio: nomeAudio,
     sorgente: sorgente, flussi: flussi, CAMPI: CAMPI, IMMAGINI: IMMAGINI };
 })();
