@@ -145,6 +145,20 @@
   // home): il gettone del Mac, dove tornare (la home, o la Store che riapre Real4K del TV) e le scelte di Real4K del TV. Vale
   // l'ultima occorrenza: la home li mette dopo l'ancora del film. (segno per il ponte del Mac: quest'app sa fare real4k-dal-mac)
   var DAL_MAC = window.parent === window && location.protocol === 'http:' && location.port === '8098' && /^\/real4k\//.test(location.pathname);
+  // i primi passi della pagina (avvio, permesso, dati, prima fila, copertine, banner, font, primo video) al servizio del TV, che
+  // li scrive nella sua traccia: il TV chiude il servizio nei primi 10-20 s di Real4K, anche dal Mac (31/10, 15:41), e cosi'
+  // dopo una caduta si vede dopo quale lavoro. Solo sul TV (nel riquadro della Store, o a pagina intera dal Mac), ognuno una
+  // volta, a fuoco e dimentica: niente risposte da aspettare
+  var passiFatti = {};
+  function segnaPasso(p) {
+    if (passiFatti[p] || !(DAL_MAC || window.name === 'hometv-app')) return;
+    passiFatti[p] = true;
+    var u = 'http://127.0.0.1:8090/api/passo?da=' + (DAL_MAC ? 'mac' : 'riquadro') + '&p=' + p;
+    try { if (navigator.sendBeacon && navigator.sendBeacon(u)) return; } catch (e) {}
+    try { var x = new XMLHttpRequest(); x.open('GET', u, true); x.send(); } catch (e) {}
+  }
+  segnaPasso('r4k-avvio');
+  try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { segnaPasso('r4k-font'); }, function () {}); } catch (e) {}
   function dallAncora(nome, forma) {
     var re = new RegExp('[#&?]' + nome + '=([^&]*)', 'g'), m, ultimo = null, x = '';
     while ((m = re.exec(location.hash))) ultimo = m[1];
@@ -153,6 +167,28 @@
   }
   // dove riaprire Real4K del TV se il Mac non risponde piu': la Store la riapre nel riquadro, senza provare il Mac
   var riapriTv = DAL_MAC ? dallAncora('riapri', /^https:\/\/[a-z0-9-]{1,39}\.github\.io\/[A-Za-z0-9._\/-]{0,200}#apri=[A-Za-z0-9%._:-]{1,160}(&da=home)?&noMac=1$/) : '';
+  // le poche domande che dal Mac restano al servizio del TV, col gettone del TV che passa la home (gtv) e il sito dell'app sullo
+  // Store (app): il punto per Continua a guardare della home e per la barra del telefono, e la fila delle chiavette (i loro film
+  // si aprono su Real4K del TV). Il TV puo' aver chiuso il servizio: allora non rispondono, e basta (film, file e copertine
+  // restano del Mac)
+  var gettoneTv = DAL_MAC ? dallAncora('gtv', /^[0-9a-f]{64}$/) : '';
+  var sitoApp = DAL_MAC ? dallAncora('app', /^https:\/\/[a-z0-9-]{1,39}\.github\.io\/[A-Za-z0-9._-]{1,100}\/$/) : '';
+  function chiediTv(via, corpo) {
+    return new Promise(function (ok, ko) {
+      if (!gettoneTv) { ko(erroreCon('servizio')); return; }
+      var x = new XMLHttpRequest();
+      x.open(corpo ? 'POST' : 'GET', 'http://127.0.0.1:8090/api/video/g/' + gettoneTv + '/' + via, true);
+      x.timeout = 5000;
+      x.onload = function () {
+        var r = null;
+        try { r = JSON.parse(x.responseText); } catch (e) {}
+        if (x.status === 200 && r) ok(r); else ko(erroreCon(x.status === 403 ? 'gettone' : 'servizio'));
+      };
+      x.onerror = x.ontimeout = function () { ko(erroreCon('servizio')); };
+      if (corpo) x.setRequestHeader('Content-Type', 'text/plain');
+      x.send(corpo ? JSON.stringify(corpo) : null);
+    });
+  }
   function prendiPermesso() {
     if (permessoInCorso) return permessoInCorso;
     var p = window.HomeTV && typeof HomeTV.permesso === 'function' ? HomeTV.permesso('video') : Promise.resolve(null);
@@ -166,18 +202,46 @@
         if (m) x = { servizio: decodeURIComponent(m[1]), gettone: m[2] };
       }
       // dal Mac (Real4K dal Mac, pagina intera dal ponte) il servizio e' la pagina stessa, mai un indirizzo scritto nell'ancora:
-      // da li' viene solo il gettone
+      // da li' viene solo il gettone. La Store apre la pagina senza (cosi' non aspetta il servizio del TV, che il TV chiude
+      // nell'istante in cui Real4K si apre): il gettone lo da' il ponte, per la sessione di questo TV
       if (!x && window.parent === window && location.protocol === 'http:' && location.port === '8098' && /^\/real4k\//.test(location.pathname)) {
         var reG = /[#&?]gettone=([0-9a-f]{64})(?=&|$)/g, gm, gUltimo = '';
         while ((gm = reG.exec(location.hash))) gUltimo = gm[1];
         if (gUltimo) x = { servizio: location.protocol + '//' + location.host, gettone: gUltimo };
+        else return gettonePonte().then(fine);
       }
+      return fine(x);
+    }, function (e) { permessoInCorso = null; throw e; });
+    function fine(x) {
       permessoInCorso = null;
       if (!x || !x.gettone) throw erroreCon('negato');
       serv.base = String(x.servizio || 'http://127.0.0.1:8090').replace(/\/+$/, '');
       serv.gettone = x.gettone;
       return x;
-    }, function (e) { permessoInCorso = null; throw e; });
+    }
+    // il gettone di questo TV chiesto al ponte (stessa origine, JSON). Se il ponte non ha una sessione viva per il TV, si
+    // torna da soli a Real4K del TV
+    function gettonePonte() {
+      return new Promise(function (ok) {
+        var r = new XMLHttpRequest(), fatto = false;
+        function esci(g) {
+          if (fatto) return;
+          fatto = true;
+          if (!g && typeof versoIlTv === 'function') versoIlTv('Il Mac non ha ancora la sessione di questo TV: apro Real4K del TV');
+          ok(g ? { servizio: location.protocol + '//' + location.host, gettone: g } : null);
+        }
+        r.open('POST', '/real4k/sessione', true);
+        r.timeout = 8000;
+        r.setRequestHeader('Content-Type', 'application/json');
+        r.onload = function () {
+          var j = null;
+          try { j = JSON.parse(r.responseText); } catch (e) { j = null; }
+          esci(r.status === 200 && j && /^[0-9a-f]{64}$/.test(String(j.gettone || '')) ? j.gettone : '');
+        };
+        r.onerror = r.ontimeout = function () { esci(''); };
+        r.send('{}');
+      });
+    }
     return permessoInCorso;
   }
   function erroreCon(codice, testo) { var e = new Error(testo || codice); e.codice = codice; return e; }
@@ -317,6 +381,7 @@
       im.onload = im.onerror = null;
       im.src = ''; // la decodifica grande si puo' buttare
       imm.cache[x.k] = url;
+      if (url) segnaPasso('r4k-copertine');
       imm.ordine.push(x.k);
       imm.peso += url ? url.length : 0;
       // 3 milioni di caratteri (circa 6 MB nella memoria della pagina): via le piu' vecchie
@@ -404,7 +469,12 @@
           if (!si && errore && (x.prove || 0) < 2 && x.box.parentNode && document.body.contains(x.box) && !lontano(x.box)) {
             x.prove = (x.prove || 0) + 1;
             setTimeout(function () { dritte.coda.push(x); prossimaDritta(); }, 1500 * x.prove);
-          } else if (x.poi) { try { x.poi(si); } catch (e) {} }
+          } else {
+            // non arrivata neanche riprovando: la sua carta lo sa (mancata). Se poi finisce nascosta a sinistra non la tiene, e
+            // tornando in vista la chiede di nuovo (vedi caricaVicineOra)
+            if (!si && errore) for (var c0 = x.box; c0 && c0 !== document.body; c0 = c0.parentNode) if (c0.caricata !== undefined) { c0.mancata = true; break; }
+            if (x.poi) { try { x.poi(si); } catch (e) {} }
+          }
           prossimaDritta();
         }
         im.onload = function () { fine(true); };
@@ -530,6 +600,7 @@
     var nuovo = $(sfondoA ? 'sfondo-b' : 'sfondo-a'), vecchio = $(sfondoA ? 'sfondo-a' : 'sfondo-b');
     sfondoA = !sfondoA;
     nuovo.style.backgroundImage = url ? 'url("' + url + '")' : 'none';
+    if (url) segnaPasso('r4k-banner');
     $('sfondo').insertBefore(nuovo, $('trailer')); // sopra il vecchio, sotto trailer e velo
     nuovo.className = 'strato' + (url ? ' on' : '') + (tipo ? ' ' + tipo : '');
     clearTimeout(svuotaTimer);
@@ -546,7 +617,7 @@
   var TRAILER_DIETRO = false;
   // videoDiretto: i film di Jellyfin dal Mac al lettore senza passare dal servizio del TV (prova, Altro › Video diretto dal Mac)
   var prefs = { lingue: ['ita', 'eng'], sottoAuto: true, dimSotto: 'medi', posSotto: 0, schermo: 'adatta', qualita: 'orig', anteprime: false,
-    anteprimeScelte: false, videoDiretto: false, real4kMac: false };
+    anteprimeScelte: false, videoDiretto: false, real4kMacNo: false };
   var punti = {}; // chiave -> { d, p, dim, nome, t, dur, quando, finito }
   var cartelle = {}; // "disco|cartella" -> { a: lingua dell'audio, s: lingua dei sottotitoli o 'no', quando }: le puntate
   function leggiMemoria() {
@@ -827,9 +898,25 @@
     // una chiavetta appena attaccata compare da sola, entro 15 s (31/10: ogni 4 s, sempre, anche col TV fermo sulla home)
     dischiTimer = setInterval(function () { if (schermo === 'inizio' && !fermoAperto()) caricaDischi(false); }, 15000);
   }
+  // una chiavetta: dal Mac si apre su Real4K del TV, gia' su di lei (i film delle chiavette li legge il servizio del TV)
+  function apriDisco(id) {
+    if (DAL_MAC) { versoIlTv('Le chiavette le apro su Real4K del TV', '#/d/' + encodeURIComponent(id)); return; }
+    apriLibreria(id, '');
+  }
   function caricaDischi(primo) {
-    // (dal Mac niente chiavette: restano su Real4K del TV, e qui una domanda ogni 15 s non servirebbe)
-    if (DAL_MAC) return;
+    // dal Mac le chiavette le dice il servizio del TV (gettone del TV) e i loro film si aprono su Real4K del TV. Se il servizio
+    // non risponde la fila non c'e', senza messaggi: il resto della pagina e' del Mac
+    if (DAL_MAC) {
+      chiediTv('dischi').then(function (r) {
+        var l = Array.isArray(r.dischi) ? r.dischi : [], firma = l.map(function (d) { return d.id; }).join('|');
+        if (firma === ultimiDischi) return;
+        if (!primo && l.length > dischi.length) messaggio('Chiavetta trovata');
+        dischi = l;
+        ultimiDischi = firma;
+        if (schermo === 'inizio') disegnaInizio('tieni');
+      }, function () {});
+      return;
+    }
     chiedi('dischi').then(function (r) {
       var prima = dischiErrore ? dischiErrore.codice : '';
       dischi = r.dischi || [];
@@ -885,7 +972,7 @@
     fd.style.transform = '';
     $('sez-dischi').hidden = !dischi.length;
     dischi.forEach(function (d) {
-      var c = cartaPiccola('disco:' + d.id, /^USBDrive/i.test(d.id) ? 'chiavetta' : 'disco', nomeDisco(d.id), 'Tutti i video', function () { apriLibreria(d.id, ''); });
+      var c = cartaPiccola('disco:' + d.id, /^USBDrive/i.test(d.id) ? 'chiavetta' : 'disco', nomeDisco(d.id), 'Tutti i video', function () { apriDisco(d.id); });
       c.info = { sopra: 'Chiavetta', titolo: nomeDisco(d.id), trama: 'I video di questa chiavetta, cartella per cartella: il TV li legge direttamente.' };
       fd.appendChild(c);
     });
@@ -1170,7 +1257,7 @@
     if (d && d.film && d.film.tot) l.push({ id: 'film', ic: 'film', nome: 'Film', fn: function () { apriTuttiJf('Movie'); } });
     if (d && d.serie && d.serie.tot) l.push({ id: 'serie', ic: 'serie', nome: 'Serie', fn: function () { apriTuttiJf('Series'); } });
     if (dischi.length) l.push({ id: 'chiavette', ic: 'chiavetta', nome: 'Chiavette USB', fn: function () {
-      if (dischi.length === 1) apriLibreria(dischi[0].id, ''); else { chiudiBinario(true); vaiRiga('dischi'); }
+      if (dischi.length === 1) apriDisco(dischi[0].id); else { chiudiBinario(true); vaiRiga('dischi'); }
     } });
     l.push({ id: 'altro', ic: 'impostazioni', nome: 'Altro', fn: function () { chiudiBinario(true); vaiRiga('altro'); } });
     var idScelto = bin.voci[bin.k] ? bin.voci[bin.k].id : '';
@@ -1486,6 +1573,7 @@
         jf.dati = d;
       }
       ridisegnaJf();
+      if (jf.dati) segnaPasso('r4k-fila');
       // il Mac spento: si riprova da soli ogni 30 secondi finche' si sta all'inizio
       clearTimeout(jf.riprova);
       if (jf.errore) jf.riprova = setTimeout(function () { if (schermo === 'inizio' && jfAttivo()) jfCaricaInizio(true); }, 30000);
@@ -1648,18 +1736,19 @@
   // poster, circa 0,6 MB. Mentre una copertina arriva la carta mostra i suoi colori (sfuma). Nel lettore si lasciano tutte
   var vicineTimer = null, vicineUltima = 0, VICINE_OGNI = 300;
   // la prima voce che si vede nella fila: di solito la scelta (sta a sinistra), ma in fondo alla fila l'ultima resta attaccata
-  // al bordo destro e si vedono anche quelle prima (come in scorriFila)
+  // al bordo destro e si vedono anche quelle prima. Con la soglia di scorriFila: una carta che comincia piu' di 2vw a sinistra
+  // del bordo e' nascosta (in fondo alle file larghe, Continua e puntate, quella a cavallo del bordo contava come vista)
   function primaVisibile(R) {
     if (!R.box || !/\bfila\b/.test(R.box.className)) return Math.max(0, R.k - 1);
     var W = window.innerWidth, visibile = W * 0.924, i;
     if (R.crea) {
       var passo = W * R.passo, sposta = Math.max(0, Math.min(R.k * passo, R.n * passo - W * 0.0125 - visibile));
-      return Math.max(0, Math.min(R.k, Math.floor(sposta / passo + 0.01)));
+      return Math.max(0, Math.min(R.k, Math.ceil((sposta - W * 0.02) / passo - 0.001)));
     }
     var e = R.voci[R.k];
     if (!e) return Math.max(0, R.k - 1);
     var x = Math.max(0, Math.min(e.offsetLeft, R.box.scrollWidth - visibile));
-    for (i = R.k; i > 0 && R.voci[i - 1] && R.voci[i - 1].offsetLeft + R.voci[i - 1].offsetWidth > x; i--) { /* indietro */ }
+    for (i = R.k; i > 0 && R.voci[i - 1] && R.voci[i - 1].offsetLeft - x >= -W * 0.02; i--) { /* indietro */ }
     return i;
   }
   // l'ultima carta da caricare, contando dalla prima che si vede (p): quelle che si vedono e una dopo. Nelle file di poster
@@ -1687,8 +1776,10 @@
       for (var k = Math.max(0, p - (r === pag.r ? 2 : 0)), z = Math.min(quanteIn(R) - 1, ultimaVicina(R, p)); k <= z; k++) {
         var c = R.voci[k];
         if (!c) continue;
+        // nascosta a sinistra senza la sua copertina (mancata anche riprovando): non si tiene, tornando in vista la richiede
+        if (k < p && c.mancata) continue;
         vicine.push(c);
-        if (c.carica) { c.caricaImg = c.carica; c.carica = null; c.caricata = true; c.caricaImg(); }
+        if (c.carica) { c.mancata = false; c.caricaImg = c.carica; c.carica = null; c.caricata = true; c.caricaImg(); }
       }
     }
     // le altre carte ancora disegnate (la fila sopra, quelle piu' in la') lasciano andare le immagini: sul TV restano
@@ -1775,9 +1866,9 @@
     carta('tetto', 'ingranaggio', 'Tetto del TV', tm.tetto,
       'Quanti Mbps il TV regge senza scatti: oltre, l\'app avvisa e il Mac toglie i picchi.', apriTetto);
     if (!st.dalMac) carta('velocita', 'audio', 'Velocità del TV', 'per l\'audio DTS', 'Quanto è veloce questo TV per convertire da solo l\'audio DTS e TrueHD.', misuraVelocita);
-    // Real4K dal Mac (prova): solo col servizio nuovo, o a pagina intera dal Mac
+    // Real4K dal Mac: solo col servizio nuovo, o a pagina intera dal Mac. Acceso di base: la carta serve a spegnerlo (e riaccenderlo)
     if (jfAttivo() && (st.real4kMac || st.dalMac)) carta('real4kmac', 'mac', 'Real4K dal Mac', testoReal4kMac(),
-      'Prova: Real4K si apre a pagina intera dal Mac, che fa tutto il lavoro (liste, copertine, film); il servizio del TV resta fermo. Le chiavette restano su Real4K del TV.',
+      'Con il Mac acceso Real4K si apre da lì, a pagina intera, e il Mac fa tutto il lavoro (liste, copertine, film): il servizio del TV resta fermo. I film delle chiavette si aprono su Real4K del TV. Qui lo spegni.',
       cambiaReal4kMac);
     // (solo se il servizio del TV lo sa fare: con la home non ancora aggiornata la carta non c'e')
     if (jfAttivo() && st.diretto) carta('diretto', 'mac', 'Video diretto dal Mac', prefs.videoDiretto ? 'acceso · prova' : 'spento',
@@ -1804,32 +1895,32 @@
       messaggio(r && r.pronto ? 'Video diretto acceso: il Mac è pronto' : 'Video diretto acceso, ma il Mac non risponde: i film vanno come sempre', 5000);
     }, function () { messaggio('Video diretto acceso: i film vanno dal Mac quando è pronto', 4000); });
   }
-  // Real4K dal Mac: acceso, la prossima apertura di Real4K arriva dal Mac a pagina intera. La scelta sta sul ponte del Mac, per
-  // questo TV: dal TV la si legge e la si cambia dal servizio, a pagina intera dal Mac direttamente
+  // Real4K dal Mac, acceso di base: l'apertura di Real4K arriva dal Mac a pagina intera quando il Mac c'e'. La scelta sta sul
+  // ponte del Mac, per questo TV: dal TV la si legge e la si cambia dal servizio, a pagina intera dal Mac direttamente
   var mac4k = { letto: false, pronto: false, acceso: false };
   function leggiReal4kMac() {
     chiedi('jf/real4k-mac').then(function (r) { mac4k = { letto: true, pronto: !!(r && r.pronto), acceso: !!(r && r.acceso) }; ricordaReal4kMac(); aggiornaAltro(); },
       function () { mac4k = { letto: true, pronto: false, acceso: false }; aggiornaAltro(); });
   }
-  // nel riquadro la scelta va anche nelle preferenze (le tiene la home): la home prova il Mac solo se e' accesa, cosi' spenta
-  // l'apertura di Real4K resta quella di sempre, senza domande in piu'. Il ponte decide: se dice altro, si corregge
+  // nel riquadro lo spento va anche nelle preferenze (le tiene la home): spento, la home non prova il Mac e l'apertura di Real4K
+  // resta quella di sempre, senza domande in piu'. Il ponte decide, ma solo verso spento (spento comanda)
   function ricordaReal4kMac() {
-    if (DAL_MAC || !mac4k.pronto || mac4k.acceso || !prefs.real4kMac) return;
-    prefs.real4kMac = false;
+    if (DAL_MAC || !mac4k.pronto || mac4k.acceso || prefs.real4kMacNo) return;
+    prefs.real4kMacNo = true;
     salvaPrefs();
   }
   function testoReal4kMac() {
-    if (DAL_MAC) return !mac4k.letto || mac4k.acceso ? 'acceso · prova' : 'spento dalla prossima volta';
-    if (!mac4k.letto) return prefs.real4kMac ? 'acceso · prova' : 'spento';
-    return !mac4k.pronto ? 'il Mac non risponde' : mac4k.acceso ? 'acceso · prova' : 'spento';
+    if (DAL_MAC) return !mac4k.letto || mac4k.acceso ? 'acceso' : 'spento dalla prossima volta';
+    if (!mac4k.letto) return prefs.real4kMacNo ? 'spento' : 'acceso';
+    return !mac4k.pronto ? 'il Mac non risponde' : mac4k.acceso ? 'acceso' : 'spento';
   }
   function cambiaReal4kMac() {
-    var acceso = DAL_MAC ? !(!mac4k.letto || mac4k.acceso) : !(mac4k.letto ? mac4k.acceso : !!prefs.real4kMac);
+    var acceso = DAL_MAC ? !(!mac4k.letto || mac4k.acceso) : !(mac4k.letto ? mac4k.acceso : !prefs.real4kMacNo);
     // spento comanda: sul TV vale subito, anche se il Mac non risponde
-    if (!acceso && !DAL_MAC) { prefs.real4kMac = false; salvaPrefs(); }
+    if (!acceso && !DAL_MAC) { prefs.real4kMacNo = true; salvaPrefs(); }
     chiedi('jf/real4k-mac', null, { acceso: acceso }).then(function (r) {
       mac4k = { letto: true, pronto: true, acceso: !!(r && r.acceso) };
-      if (!DAL_MAC && mac4k.acceso !== !!prefs.real4kMac) { prefs.real4kMac = mac4k.acceso; salvaPrefs(); }
+      if (!DAL_MAC && prefs.real4kMacNo !== !mac4k.acceso) { prefs.real4kMacNo = !mac4k.acceso; salvaPrefs(); }
       aggiornaAltro();
       if (DAL_MAC) messaggio(mac4k.acceso ? 'Real4K dal Mac: acceso' : 'Real4K dal Mac spento: dalla prossima volta Real4K si apre dal TV', 6000);
       else messaggio(mac4k.acceso ? 'Real4K dal Mac acceso: esci e riapri Real4K, arriva dal Mac' : 'Real4K dal Mac spento', 6000);
@@ -3626,6 +3717,7 @@
     L.daQui = 0;
   });
   v.addEventListener('playing', function () {
+    segnaPasso('r4k-video');
     attesa(false);
     if (L) { L.partito = true; L.errori = 0; } // riparte: le prove dopo un errore ricominciano da zero
     if (L && L.jf) riportaJf('inizio');
@@ -4209,8 +4301,10 @@
     var corpo = { jf: x.jf.id, titolo: puntata && s.serie ? s.serie.titolo : s.titolo, anno: puntata ? 0 : s.anno, stagione: puntata ? s.stagione : 0,
       episodio: puntata ? s.episodio : 0, posizione: Math.round(fine ? d : t), durata: Math.round(d), guardato: Math.round(x.guardato), inPausa: v.paused,
       chiuso: !!chiuso || !!fine, app: String(location.href).split('#')[0] };
-    // (dal Mac il punto va solo a Jellyfin, con riportaJf: il servizio del TV non si tocca e il Mac non lo tiene)
+    // (dal Mac il punto va a Jellyfin con riportaJf e, per Continua a guardare della home e la barra del telefono, al servizio
+    // del TV col suo gettone, con il sito dell'app sullo Store: la scheda della home riapre Real4K da li')
     if (!DAL_MAC) chiedi('punto', null, corpo).then(null, function () {});
+    else if (sitoApp) { corpo.app = sitoApp; chiediTv('punto', corpo).then(null, function () {}); }
   }
   // Real4K dal Mac: se il Mac non risponde piu' (spento, addormentato, ponte fermo) si torna da soli a Real4K del TV, dallo
   // stesso punto del film se ce n'era uno. Vale un segno chiaro: il gettone del Mac non piu' valido, o il ponte che non risponde
@@ -4249,12 +4343,13 @@
     return x && x.jf && !x.jf.trailer ? '#/jf/' + x.jf.id + '?t=' + Math.max(0, Math.floor(t)) : '';
   }
   // si torna a Real4K del TV (la Store la riapre nel riquadro, senza il Mac), col film di adesso dallo stesso punto
-  function versoIlTv(testo) {
+  // (ancora: dove riaprire, se non e' il film di adesso: una chiavetta)
+  function versoIlTv(testo, ancora) {
     if (!DAL_MAC || macGiu.finito) return;
     macGiu.finito = true;
-    var a = ancoraFilm(L);
+    var a = ancora || ancoraFilm(L);
     try { v.pause(); } catch (e) {}
-    messaggio(testo + (a ? ', dallo stesso punto' : ''), 5000);
+    messaggio(testo + (a && !ancora ? ', dallo stesso punto' : ''), 5000);
     // (l'uscita di tv-app.js: prima l'app salva, poi si va solo se la Store risponde; un Indietro durante l'attesa va a casa)
     setTimeout(function () {
       if (riapriTv && HomeTV.vaiDalMac) HomeTV.vaiDalMac(riapriTv + (a ? '&ancora=' + encodeURIComponent(a) : ''));
@@ -5119,7 +5214,10 @@
     // aperta da Continua a guardare della home: #/v/<percorso>?d=&dim= (chiavetta e dimensione), piu' t=<secondi> (il
     // punto della scheda) o dacapo=1; con Indietro si torna alla home
     var m = /#\/v\/([^?]*)\?(.*)$/.exec(location.hash), mj = /#\/jf\/([0-9a-f]{32})(?:\?(.*))?$/.exec(location.hash);
+    // da Real4K dal Mac, una chiavetta: #/d/<id> (Real4K del TV si apre gia' su di lei)
+    var md = DAL_MAC ? null : /^#\/d\/([A-Za-z0-9%._-]{1,200})(?=$|[?&])/.exec(location.hash);
     prendiPermesso().then(function () {
+      segnaPasso('r4k-permesso');
       apriInizio(null, true);
       // all'apertura solo quello che serve alle file (31/10: il TV chiudeva il servizio entro un secondo dall'apertura di Real4K):
       // il limitatore del Mac e il tetto del TV dopo 4 s, e le loro carte in Altro si aggiornano da sole. Un film che parte
@@ -5127,10 +5225,11 @@
       if (m || mj) { macCaricaStato(); caricaTetto(); } else setTimeout(function () { macCaricaStato(aggiornaAltro); caricaTetto(aggiornaAltro); }, 4000);
       // Jellyfin: lo stato (server, utente, i codec del TV) e le file dell'inizio; dalla home un film di Jellyfin riparte subito
       jfCaricaStato(function () {
+        segnaPasso('r4k-dati');
         // Real4K dal Mac: la scelta di questo TV per la sua carta in Altro (dal TV dopo 4 s, come il limitatore: all'apertura
         // solo quello che serve alle file)
         // (spenta, nessuna domanda al Mac: la carta dice "spento" dalle preferenze, e il primo tocco chiede il resto)
-        if (jf.stato && (jf.stato.dalMac || (jf.stato.real4kMac && prefs.real4kMac))) setTimeout(leggiReal4kMac, DAL_MAC ? 0 : 4000);
+        if (jf.stato && (jf.stato.dalMac || (jf.stato.real4kMac && !prefs.real4kMacNo))) setTimeout(leggiReal4kMac, DAL_MAC ? 0 : 4000);
         // le chiavette: senza Jellyfin sono la pagina, subito; con Jellyfin dopo 3,5 s (poi ogni 15 s)
         if (jfAttivo()) setTimeout(function () { caricaDischi(true); }, 3500); else caricaDischi(true);
         jfCaricaInizio('tutto');
@@ -5148,6 +5247,14 @@
         var x = { d: q.d || '', p: p, nome: nome, dim: +q.dim || 0, daCapo: q.dacapo === '1', t: q.t !== undefined && isFinite(+q.t) ? +q.t : -1 };
         // prima le chiavette: se la lettera e' cambiata, il film si cerca anche sulle altre
         chiedi('dischi').then(function (r) { dischi = r.dischi || []; riprendi(x, 'esci'); }, function () { riprendi(x, 'esci'); });
+      }
+      if (md) {
+        chiedi('dischi').then(function (r) {
+          var id = '';
+          try { id = decodeURIComponent(md[1]); } catch (e) { id = ''; }
+          dischi = r.dischi || [];
+          if (dischi.some(function (d) { return d.id === id; })) apriLibreria(id, ''); else messaggio('Questa chiavetta non c\'è più', 5000);
+        }, function () {});
       }
     }, function (e) { dischiErrore = e; jf.stato = { server: null, utente: null, errore: e.codice }; apriInizio(); });
   });
