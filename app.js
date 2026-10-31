@@ -337,6 +337,9 @@
     while (dritte.inVolo < (Date.now() - apertaAlle < 3000 ? 2 : 4) && dritte.coda.length) {
       var x = dritte.coda.pop();
       if (!x.box.parentNode || !document.body.contains(x.box) || lontano(x.box)) { if (x.poi) x.poi(false); continue; }
+      // la carta ha gia' la sua immagine, arrivata o in viaggio (una carta in errore uscita e tornata entro 1,5-3 s: il
+      // nuovo tentativo e la richiesta nuova). Due <img> uno sopra l'altro sarebbero solo memoria in piu': quella che c'e' basta
+      if (x.box.querySelector('img')) continue;
       dritte.inVolo++;
       (function (x) {
         var im = el('img'), fatto = false, t = null;
@@ -645,8 +648,11 @@
     return R;
   }
   function quanteIn(R) { return R.crea ? R.n : R.voci.length; }
+  // le carte disegnate di una fila virtuale: da tre prima della prima che si vede a dieci dopo la scelta. In fondo alla fila
+  // l'ultima resta attaccata al bordo destro e si vedono anche le sette prima della scelta (vedi scorriFila): contando dalla
+  // scelta mancavano, mezza fila vuota su "Tutti i film" (31/10 sul TV: «delle copertine mentre scorro a sinistra scompaiono»)
   function disegnaRiga(R) {
-    var da = Math.max(0, R.k - 3), a = Math.min(R.n - 1, R.k + 10), passo = window.innerWidth * R.passo, i;
+    var da = Math.max(0, primaVisibile(R) - 3), a = Math.min(R.n - 1, R.k + 10), passo = window.innerWidth * R.passo, i;
     for (i in R.voci) {
       if (!Object.prototype.hasOwnProperty.call(R.voci, i) || (+i >= da && +i <= a)) continue;
       var vecchia = R.voci[i];
@@ -1577,8 +1583,10 @@
   }
   // le immagini delle carte che si vedono: la fila scelta e quella sotto (nelle pagine semplici anche quella sopra e la seconda
   // sotto), contando dalla prima carta che si vede. Con le frecce tenute premute si chiedono lo stesso, al massimo ogni 300 ms
-  // (prima le ultime chieste: vedi prossimaDritta); le altre lasciano andare le immagini subito. Niente margine: la memoria
-  // serve al TV (31/10). Mentre una copertina arriva la carta mostra i suoi colori (sfuma). Nel lettore si lasciano tutte
+  // (prima le ultime chieste: vedi prossimaDritta); le altre lasciano andare le immagini subito. Nella fila scelta anche le due
+  // carte nascoste subito a sinistra, che tornano con Sinistra (31/10 sul TV: «delle copertine mentre scorro a sinistra
+  // scompaiono»; nel riquadro dell'app il TV non le ha in cache e le riscaricava): due poster, circa 0,6 MB. Mentre una
+  // copertina arriva la carta mostra i suoi colori (sfuma). Nel lettore si lasciano tutte
   var vicineTimer = null, vicineUltima = 0, VICINE_OGNI = 300;
   // la prima voce che si vede nella fila: di solito la scelta (sta a sinistra), ma in fondo alla fila l'ultima resta attaccata
   // al bordo destro e si vedono anche quelle prima (come in scorriFila)
@@ -1606,7 +1614,7 @@
     var da = pag.disponi ? pag.r : Math.max(0, pag.r - 1), a = pag.disponi ? pag.r + 1 : pag.r + 2, vicine = [];
     for (var r = da; r <= Math.min(pag.righe.length - 1, a); r++) {
       var R = pag.righe[r], p = primaVisibile(R);
-      for (var k = p; k < Math.min(quanteIn(R), p + 9); k++) {
+      for (var k = Math.max(0, p - (r === pag.r ? 2 : 0)); k < Math.min(quanteIn(R), p + 9); k++) {
         var c = R.voci[k];
         if (!c) continue;
         vicine.push(c);
