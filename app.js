@@ -3625,7 +3625,8 @@
   // Real4K dal Mac: il lettore a pezzi (pezzi.js, MSE) del film aperto, se il film arriva a pezzi. Uno solo, fermato a ogni
   // cambio di sorgente (un altro film, un'altra qualita' o lingua, il lettore chiuso)
   var pz = null;
-  function fermaPezzi() { if (pz) { pz.ferma(); pz = null; } }
+  // (fermando il lettore a pezzi le sue misure restano al film, per il diario: un film ne puo' avere piu' d'uno, a ogni ricarica)
+  function fermaPezzi() { if (pz) { if (L) (L.statiPezzi = L.statiPezzi || []).push(pz.stato()); pz.ferma(); pz = null; } }
   function pezziPossibili() { return DAL_MAC && !!window.Pezzi && Pezzi.possibile() && !!window.fetch; }
   // il film va a pezzi: dal Mac, preparato da Jellyfin (copia o conversione) a pezzi fMP4
   function aPezzi(x) { var j = x && x.jf; return !!(DAL_MAC && j && j.pezzi && (j.modo === 'copia' || j.modo === 'converti')); }
@@ -3833,12 +3834,54 @@
     if (!L) return;
     var d = diarioDi(L), ora = Date.now();
     if (!d.primo) d.primo = ora - d.t0;
+    ripartitoDopoSalto();
     if (d.tFermo) { d.msFermo += ora - d.tFermo; d.tFermo = 0; }
     d.tm = ora;
     d.mt = v.currentTime;
   });
-  v.addEventListener('waiting', function () { if (!L) return; var d = diarioDi(L); if (d.primo && !d.tFermo && !v.seeking) { d.fermate++; d.tFermo = Date.now(); } });
-  v.addEventListener('seeking', function () { if (L) { var d = diarioDi(L); d.salti++; d.mt = -1; } });
+  v.addEventListener('waiting', function () {
+    if (!L) return;
+    var d = diarioDi(L);
+    if (d.primo && !d.tFermo && !v.seeking) {
+      d.fermate++;
+      d.tFermo = Date.now();
+      // a pezzi: perche' (Jellyfin che prepara, la rete, il TV pieno, un salto...) e se l'audio aveva piu' dati del video
+      if (pz) {
+        var c = pz.causa();
+        if (!d.cause) d.cause = {};
+        d.cause[c.causa] = (d.cause[c.causa] || 0) + 1;
+        if (c.audio - c.video > 0.5) d.soloVideo = (d.soloVideo || 0) + 1;
+      } else if (L.jf && (L.jf.modo === 'diretto' || L.jf.modo === 'file')) {
+        // a file il lettore del TV non dice perche': lo dice il server, che sa se sta aspettando il disco (o Jellyfin) o la rete
+        var x = L;
+        chiedi('jf/flusso/' + x.jf.id, { ms: x.jf.ms }).then(function (r) {
+          if (L !== x || !r) return;
+          var c2 = r.lettura > 300 ? 'disco' : r.attesa > 300 ? 'rete' : 'altro';
+          if (!d.cause) d.cause = {};
+          d.cause[c2] = (d.cause[c2] || 0) + 1;
+        }, function () {});
+      }
+    }
+  });
+  // (il salto sul punto stesso che fa il lettore a pezzi per risincronizzare audio e video non e' un salto di chi guarda)
+  v.addEventListener('seeking', function () {
+    if (!L) return;
+    var d = diarioDi(L);
+    // (un salto di chi guarda, col film che va: da qui si conta quanto ci mette a ripartire)
+    if (!(pz && pz.interno())) { d.salti++; d.tSalto = v.paused ? 0 : Date.now(); }
+    d.mt = -1;
+  });
+  // il film riparte dopo un salto: subito (i dati c'erano) o quando arrivano. Nel diario il tempo massimo e quello medio
+  function ripartitoDopoSalto() {
+    var d = L && L.diario;
+    if (!d || !d.tSalto) return;
+    var ms = Date.now() - d.tSalto;
+    d.tSalto = 0;
+    d.msSaltoMax = Math.max(d.msSaltoMax || 0, ms);
+    d.msSaltoSomma = (d.msSaltoSomma || 0) + ms;
+    d.saltiMisurati = (d.saltiMisurati || 0) + 1;
+  }
+  v.addEventListener('seeked', function () { if (!v.paused && v.readyState >= 3) ripartitoDopoSalto(); });
   v.addEventListener('pause', function () { if (L) diarioDi(L).mt = -1; });
   v.addEventListener('timeupdate', function () {
     if (!L || v.paused || v.seeking) return;
@@ -3848,15 +3891,48 @@
     d.tm = ora;
     d.mt = v.currentTime;
   });
+  // le misure dei lettori a pezzi di un film (uno per ricarica) messe insieme: somme, massimi, medie pesate sui pezzi
+  function misurePezzi(l) {
+    var m = { pezzi: 0, msByte: 0, msByteMax: 0, mbsMin: 0, mbs: 0, scarto: 0, spostaAudio: 0, davantiMax: 0, quota: 0, ritardo: 0, riprove: 0, risinc: 0, riserva: 0 };
+    l.forEach(function (s) {
+      if (!s) return;
+      var n = s.misurati || 0;
+      m.msByte += (s.msByte || 0) * n;
+      m.mbs += (s.mbs || 0) * n;
+      m.pezzi += n;
+      m.msByteMax = Math.max(m.msByteMax, s.msByteMax || 0);
+      if (s.mbsMin && (!m.mbsMin || s.mbsMin < m.mbsMin)) m.mbsMin = s.mbsMin;
+      m.scarto = Math.max(m.scarto, s.scarto || 0);
+      if (s.spostaAudio) m.spostaAudio = s.spostaAudio;
+      m.davantiMax = Math.max(m.davantiMax, s.davantiMax || 0);
+      m.quota += s.quota || 0;
+      m.ritardo = Math.max(m.ritardo, s.ritardo || 0);
+      m.riprove += s.riprove || 0;
+      m.risinc += s.risinc || 0;
+      m.riserva = Math.max(m.riserva, s.riservaMB || 0);
+    });
+    if (m.pezzi) { m.msByte = Math.round(m.msByte / m.pezzi); m.mbs = Math.round(m.mbs / m.pezzi * 10) / 10; }
+    return m;
+  }
   function mandaDiario(x) {
     var d = x.diario, i = x.info || {}, vv = i.video || {}, j = x.jf, a = (i.audio || []).filter(function (t) { return t.num === x.audio; })[0] || {};
     if (!d || !d.primo && !d.errore) return;
+    var mp = misurePezzi((x.statiPezzi || []).concat(pz && L === x ? [pz.stato()] : [])), ca = d.cause || {};
     var strada = j ? (j.modo === 'mac' ? 'mac' : j.modo || 'diretto') : x.voce.tvDi ? 'versione-tv' : /^(blu-ray|dvd)$/.test(i.formato || '') ? 'disco' : 'chiavetta';
     chiedi('tv/diario', null, { strada: strada, formato: j && j.modo !== 'diretto' && j.modo !== 'file' ? (j.pezzi ? 'pezzi' : 'hls') : String(i.formato || '').toLowerCase(),
       codec: vv.codec || '', larghezza: vv.largh || 0, altezza: vv.alt || 0, hdr: vv.hdr || '', audio: a.codec || '', mbps: i.mbps || 0,
       picco: i.picchi ? i.picchi.massimo : 0, secondi: Math.round(d.avanti), msPrimo: d.primo, fermate: d.fermate,
       msFermo: d.msFermo + (d.tFermo ? Date.now() - d.tFermo : 0), salti: d.salti, ritmo: d.muro > 5 ? d.avanti / d.muro : 0, errore: d.errore,
-      diretto: x.dirInfo || '', dirErrore: x.dirErrore || 0, dirRichieste: x.dirRichieste || 0, dirHttps: x.dirHttps || 0 }).then(null, function () {});
+      diretto: x.dirInfo || '', dirErrore: x.dirErrore || 0, dirRichieste: x.dirRichieste || 0, dirHttps: x.dirHttps || 0,
+      // a pezzi: i pezzi e i loro tempi, lo scarto audio-video, il buffer usato; le fermate per causa, quelle con l'audio piu' avanti
+      // del video, e le risincronizzazioni
+      pezzi: mp.pezzi, msByte: mp.msByte, msByteMax: mp.msByteMax, mbsMin: mp.mbsMin, mbs: mp.mbs, scarto: mp.scarto, spostaAudio: mp.spostaAudio,
+      davantiMax: mp.davantiMax, quota: mp.quota, ritardo: mp.ritardo, riprove: mp.riprove,
+      fJellyfin: ca.jellyfin || 0, fRete: ca.rete || 0, fTv: ca.tv || 0, fSalto: ca.salto || 0, fFermo: ca.fermo || 0, fDisco: ca.disco || 0,
+      fAltro: (ca.altro || 0) + (ca.avvio || 0),
+      soloVideo: d.soloVideo || 0, risinc: mp.risinc, riserva: mp.riserva,
+      // dopo i salti: quanto ci ha messo a ripartire (massimo e medio, ms)
+      msSalto: d.msSaltoMax || 0, msSaltoMedio: d.saltiMisurati ? Math.round(d.msSaltoSomma / d.saltiMisurati) : 0 }).then(null, function () {});
   }
   v.addEventListener('error', function () {
     if (!L || !v.getAttribute('src')) return;
@@ -4181,6 +4257,12 @@
       var sentito = DAL_MAC ? (g.audio || []).filter(function (z) { return z.indice === g.audioScelto; })[0] : null;
       var aFile = g.modo === 'diretto' || g.modo === 'file';
       if (DAL_MAC && aFile && sentito && !sentito.letto && (a === undefined || a === null) && pezziPossibili()) return stradaJf(x, t, g.audioScelto, via);
+      // dal Mac anche l'Originale passa dai pezzi, col video e l'audio copiati com'erano (l'HDR10 compreso): con MSE il TV tiene
+      // davanti il suo buffer piu' la riserva in memoria, piu' secondi del lettore nativo col file, e dopo un calo riparte appena
+      // arrivano i dati (richiesta del 2/11). Solo HEVC e H.264, che il TV legge sicuro a pezzi; non i trailer
+      if (DAL_MAC && aFile && via !== 'pezzi' && via !== 'file' && !j.trailer && pezziPossibili() && g.video && /^(HEVC|AVC)$/.test(g.video.codec)) {
+        return stradaJf(x, t, a, 'pezzi');
+      }
       var pezzi = DAL_MAC && !aFile && pezziPossibili() && /[?&]SegmentContainer=mp4(&|$)/i.test(String(g.url || ''));
       if (DAL_MAC && ((!aFile && !pezzi) || (aFile && sentito && !sentito.letto))) {
         if (!x.partito) x.daCarica = t || 0;

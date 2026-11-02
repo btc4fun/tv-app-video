@@ -28,6 +28,11 @@ var Pezzi = (function () {
   'use strict';
 
   var AVANTI_S = 40, AVANTI_BYTE = 96 << 20, MIN_BYTE = 12 << 20, DIETRO_S = 12, BLOCCO = 2 << 20, CODA_MAX = 8 << 20;
+  // la riserva: col TV pieno i pezzi dopo si scaricano lo stesso e aspettano in memoria, fino a 64 MB (8 s in piu' di un 4K da
+  // 67 Mbps, che si aggiungono ai circa 8 che tiene il TV), ed entrano man mano che il film consuma. Una rete che rallenta per
+  // qualche secondo non ferma il film. Dopo un salto e all'avvio non si aspetta: il film parte coi primi dati, la riserva si
+  // riempie dietro (richiesta del 2/11)
+  var RISERVA = 64 << 20;
   // le attese tra un tentativo e l'altro di un pezzo che non arriva (Jellyfin che riparte, il Wi-Fi che cade un attimo)
   var ATTESE = [1000, 2000, 4000, 8000];
   // senza un byte: il primo blocco di un pezzo puo' tardare (la conversione 4K che parte), i successivi no; le playlist poco
@@ -139,15 +144,15 @@ var Pezzi = (function () {
     for (i = 0; i < parti.length; i++) { b.set(parti[i], k); k += parti[i].length; }
     return b;
   }
-  // il segmento iniziale: le tracce (id, scala del tempo, video o audio, misura predefinita dei campioni) e, per ognuna, un
-  // segmento iniziale con solo lei (per i due posti del modo "divisi")
+  // il segmento iniziale: le tracce (id, scala del tempo, video o audio, misura predefinita dei campioni, spostamento dalla
+  // lista delle modifiche elst in secondi) e, per ognuna, un segmento iniziale con solo lei (per i due posti del modo "divisi")
   function leggiInit(b) {
-    var tracce = [], ftyp = null, mvhd = null, trex = {}, mehd = null, trak = [];
+    var tracce = [], ftyp = null, mvhd = null, trex = {}, mehd = null, trak = [], scalaFilm = 0;
     scatole(b, 0, b.length, function (t, a, z, a0) {
       if (t === 'ftyp') ftyp = b.subarray(a0, z);
       if (t !== 'moov') return true;
       scatole(b, a, z, function (t2, a2, z2, a20) {
-        if (t2 === 'mvhd') mvhd = b.subarray(a20, z2);
+        if (t2 === 'mvhd') { mvhd = b.subarray(a20, z2); if (z2 - a2 >= 24) scalaFilm = u32(b, a2 + (b[a2] === 1 ? 20 : 12)); }
         if (t2 === 'mvex') {
           scatole(b, a2, z2, function (t3, a3, z3, a30) {
             if (t3 === 'mehd') mehd = b.subarray(a30, z3);
@@ -156,9 +161,23 @@ var Pezzi = (function () {
           });
         }
         if (t2 !== 'trak') return true;
-        var tr = { id: 0, scala: 0, video: false, audio: false };
+        var tr = { id: 0, scala: 0, video: false, audio: false, vuoto: 0, salta: 0 };
         scatole(b, a2, z2, function (t3, a3, z3) {
           if (t3 === 'tkhd' && z3 - a3 >= 24) tr.id = u32(b, a3 + (b[a3] === 1 ? 20 : 12));
+          // (la lista delle modifiche: un tratto vuoto all'inizio ritarda la traccia, un inizio dentro i dati la anticipa;
+          // MSE di un TV puo' non seguirla, e allora audio e video partono sfasati di tanto)
+          if (t3 === 'edts') {
+            scatole(b, a3, z3, function (t4, a4, z4) {
+              if (t4 !== 'elst' || z4 - a4 < 8) return true;
+              var v1 = b[a4] === 1, n = u32(b, a4 + 4), k = a4 + 8, passo = v1 ? 20 : 12;
+              for (var e = 0; e < n && k + passo <= z4; e++, k += passo) {
+                var dur = v1 ? u32(b, k) * 4294967296 + u32(b, k + 4) : u32(b, k), mt = v1 ? s32(b, k + 8) * 4294967296 + u32(b, k + 12) : s32(b, k + 4);
+                if (mt === -1) tr.vuoto += dur;
+                else { tr.salta = mt; break; }
+              }
+              return true;
+            });
+          }
           if (t3 === 'mdia') {
             scatole(b, a3, z3, function (t4, a4, z4) {
               if (t4 === 'mdhd' && z4 - a4 >= 24) tr.scala = u32(b, a4 + (b[a4] === 1 ? 20 : 12));
@@ -177,6 +196,8 @@ var Pezzi = (function () {
     for (var i = 0; i < tracce.length; i++) {
       var tr = tracce[i], x = trex[tr.id];
       tr.misura = x ? x.misura : 0;
+      // (lo spostamento della traccia voluto dalle modifiche, in secondi: + ritarda, - anticipa)
+      tr.spostata = (scalaFilm > 0 ? tr.vuoto / scalaFilm : 0) - (tr.scala > 0 ? tr.salta / tr.scala : 0);
       if (ftyp && mvhd && x) tr.init = unisci([ftyp, scatola('moov', [mvhd, trak[i], scatola('mvex', mehd ? [mehd, x.b] : [x.b])])]);
     }
     return tracce;
@@ -204,9 +225,10 @@ var Pezzi = (function () {
     dentro(0, b.length);
     return n;
   }
-  // il tempo (secondi) del primo frammento che comincia in b: quello del video se c'e'. -1 = non si legge (ancora)
-  function tempoFrammento(b, tracce) {
-    var out = -1, video = false;
+  // i tempi (secondi) del primo frammento che comincia in b, per il video e per l'audio: { video, audio }, -1 dove non si legge
+  // (ancora). Lo scarto tra i due dice se Jellyfin ha messo l'audio fuori posto rispetto al video
+  function tempiFrammento(b, tracce) {
+    var out = { video: -1, audio: -1 };
     scatole(b, 0, b.length, function (t, a, z) {
       if (t !== 'moof') return true;
       scatole(b, a, z, function (t2, a2, z2) {
@@ -219,7 +241,9 @@ var Pezzi = (function () {
         });
         for (var i = 0; i < tracce.length; i++) {
           var tr = tracce[i];
-          if (tr.id === id && tr.scala > 0 && dt >= 0 && (out < 0 || (tr.video && !video))) { out = dt / tr.scala; video = tr.video; }
+          if (tr.id !== id || !(tr.scala > 0) || dt < 0) continue;
+          if (tr.video && out.video < 0) out.video = dt / tr.scala;
+          if (tr.audio && out.audio < 0) out.audio = dt / tr.scala;
         }
         return true;
       });
@@ -227,6 +251,8 @@ var Pezzi = (function () {
     });
     return out;
   }
+  // il tempo (secondi) del primo frammento che comincia in b: quello del video se c'e'. -1 = non si legge (ancora)
+  function tempoFrammento(b, tracce) { var x = tempiFrammento(b, tracce); return x.video >= 0 ? x.video : x.audio; }
   // un moof di Jellyfin con piu' tracce -> per ogni traccia un moof con solo lei, e dove stanno i suoi dati (rispetto all'inizio
   // del moof). { tracce: [{ id, moof (con data_offset da completare), offs: [posizioni dei data_offset nel moof nuovo], pezzi: [{ da,
   // n }] }] }, null se non si sa leggere
@@ -237,8 +263,9 @@ var Pezzi = (function () {
     scatole(b, 8, b.length, function (t, a, z, a0) {
       if (t === 'mfhd') mfhd = b.subarray(a0, z);
       if (t !== 'traf') return true;
-      var figli = [], id = 0, base = 0, misura = 0, pezzi = [], tfhd = null, dalMoof = 0;
+      var figli = [], id = 0, base = 0, misura = 0, pezzi = [], tfhd = null, dalMoof = 0, dt = -1;
       scatole(b, a, z, function (t2, a2, z2, a20) {
+        if (t2 === 'tfdt' && z2 - a2 >= 8) dt = b[a2] === 1 ? (z2 - a2 >= 12 ? u32(b, a2 + 4) * 4294967296 + u32(b, a2 + 8) : -1) : u32(b, a2 + 4);
         if (t2 === 'tfhd') {
           var fl = u32(b, a2) & 0xffffff, k = a2 + 8;
           id = u32(b, a2 + 4);
@@ -290,7 +317,9 @@ var Pezzi = (function () {
         return true;
       });
       if (rotto || !tfhd) { rotto = true; return false; }
-      out.push({ id: id, figli: figli, pezzi: pezzi });
+      var tempo = -1;
+      for (var q = 0; q < tracce.length; q++) if (tracce[q].id === id && tracce[q].scala > 0 && dt >= 0) tempo = dt / tracce[q].scala;
+      out.push({ id: id, figli: figli, pezzi: pezzi, t: tempo });
       return true;
     });
     if (rotto || !mfhd || !out.length) return null;
@@ -384,9 +413,9 @@ var Pezzi = (function () {
                 var hm = new Uint8Array(8);
                 scriviU32(hm, 0, x.dati + 8);
                 hm[4] = 109; hm[5] = 100; hm[6] = 97; hm[7] = 116;
-                emetti(x.id, unisci([x.moof, hm]));
+                emetti(x.id, unisci([x.moof, hm]), x.t);
               }
-              emetti(x.id, dati.subarray(s - pos, e - pos));
+              emetti(x.id, dati.subarray(s - pos, e - pos), x.t);
             }
           }
         }
@@ -452,7 +481,8 @@ var Pezzi = (function () {
       clearTimeout(timer);
       timer = null;
       try { if (ctl) ctl.abort(); } catch (e) {}
-      try { if (rd) rd.cancel(); } catch (e) {}
+      // (cancel() dopo abort() rifiuta: senza un gestore sarebbe un errore della pagina)
+      try { var pc = rd ? rd.cancel() : null; if (pc && pc.then) pc.then(null, function () {}); } catch (e) {}
       try { if (xhr) xhr.abort(); } catch (e) {}
     }
     function rotta() { if (!finito) { chiudi(); cb.errore(0); } }
@@ -514,8 +544,14 @@ var Pezzi = (function () {
     var log = typeof o.log === 'function' ? o.log : function () {};
     // (un indirizzo relativo vale accanto alla pagina: le playlist dentro si risolvono su quello intero)
     var url0 = risolvi(String(o.url || ''), window.location ? location.href : undefined) || String(o.url || ''), da0 = o.da > 0 ? o.da : 0;
+    // (avanti: meno secondi davanti del solito, solo per le prove)
+    var avantiS = o.avanti > 0 && o.avanti < AVANTI_S ? o.avanti : AVANTI_S;
     var st = { pezzi: 0, durata: 0, prossimo: 0, scaricati: 0, aggiunti: 0, secondi: 0, quota: 0, riprove: 0, buchi: 0, salti: 0, offset: 0,
-      maxByte: AVANTI_BYTE, fine: false, errore: '', tipo: '', modo: '', ritardo: 0 };
+      maxByte: AVANTI_BYTE, fine: false, errore: '', tipo: '', modo: '', ritardo: 0,
+      // (le misure per il diario: attesa del primo byte e MB/s dei pezzi, scarto tra audio e video, buffer usato)
+      misurati: 0, byteSomma: 0, byteMax: 0, mbsSomma: 0, mbsN: 0, mbsMin: 0, scartoMax: 0, davantiMax: 0, tSalto: 0, risinc: 0, ultimaQuota: 0, riservaMax: 0 };
+    // le fermate del <video> (per risincronizzare audio e video quando ripartono) e il salto fatto da qui (interno: non e' di chi guarda)
+    var tFermo = 0, avantiAudio = false, interno = false, partito = false;
     var lista = null, init = null, tracce = [], ms = null, aperta = false, pronto = false, fermo = false, timer = null, giri = 0, giunto = false;
     // le corsie verso il <video>: una (insieme) o due (divisi: video e audio). { tipo, traccia, sb, init, coda, byte, agg, azzera,
     // offset (da dare), togliDa (dati vecchi da togliere prima dei nuovi) }
@@ -558,6 +594,20 @@ var Pezzi = (function () {
     function peso() { return st.secondi > 0 ? st.aggiunti / st.secondi : 0; }
     function occupate() { for (var i = 0; i < corsie.length; i++) if (!corsie[i].sb || corsie[i].sb.updating) return true; return false; }
     function inCoda() { for (var i = 0; i < corsie.length; i++) if (corsie[i].coda.length || corsie[i].agg) return true; return false; }
+    // il TV ha detto "pieno" da poco: e' lui che limita, non la rete (allora conviene la riserva in memoria)
+    function tvPieno() { return quotaFerma || (st.ultimaQuota > 0 && Date.now() - st.ultimaQuota < 10000); }
+    // quanto puo' aspettare in memoria (coda per il <video> e blocchi del pezzo che arriva): la riserva col TV pieno
+    function limiteCoda() { return tvPieno() ? RISERVA : CODA_MAX; }
+    // il pezzo k e' arrivato tutto e aspetta in coda in ogni corsia (il suo ultimo blocco c'e', segnato come fine)
+    function accodato(k) {
+      if (!corsie.length) return false;
+      for (var i = 0; i < corsie.length; i++) {
+        var c = corsie[i], si = false;
+        for (var j = 0; j < c.coda.length && !si; j++) if (c.coda[j].k === k && c.coda[j].fine) si = true;
+        if (!si && !(c.agg && c.agg.k === k && c.agg.fine)) return false;
+      }
+      return true;
+    }
     // il punto del film: quello del <video>, ma prima che ci arrivi (alPunto) quello chiesto. Sul TV, tolta la sorgente, il <video>
     // tiene il punto del film di prima fino ai metadati nuovi (sonda dei pezzi, 31/10)
     function punto() { return giunto ? video.currentTime : da0; }
@@ -628,13 +678,25 @@ var Pezzi = (function () {
           }
         }
         if (!c.coda.length) continue;
+        // (divisi: l'audio non va oltre il video. Finche' il video di quel pezzo e' ancora in coda, un frammento audio che comincia
+        // oltre la fine del video aspetta: se il video si ferma, si ferma anche l'audio, e il TV non li fa andare ognuno per se')
+        var lim = i > 0 && modo.modo === 'divisi' ? limiteAudio(c.coda[0].k) : Infinity;
+        if (c.coda[0].t > lim) continue;
         var l = [], n = 0, k = c.coda[0].k, fine = false;
-        while (c.coda.length && c.coda[0].k === k && (n === 0 || n + c.coda[0].b.length <= BLOCCO)) { var x = c.coda.shift(); l.push(x.b); n += x.b.length; fine = x.fine; }
+        while (c.coda.length && c.coda[0].k === k && !(c.coda[0].t > lim) && (n === 0 || n + c.coda[0].b.length <= BLOCCO)) { var x = c.coda.shift(); l.push(x.b); n += x.b.length; fine = x.fine; }
         c.byte -= n;
         codaByte -= n;
         aggiungi(c, l.length === 1 ? l[0] : unisci(l, n), k, fine);
       }
-      if (inVolo && inVolo.attende && codaByte + inVolo.partiN < CODA_MAX / 2) { inVolo.attende = false; inVolo.d.riprendi(); }
+      if (inVolo && inVolo.attende && codaByte + inVolo.partiN < limiteCoda() / 2) riparti(inVolo);
+    }
+    // fin dove puo' arrivare l'audio del pezzo k: mezzo secondo oltre la fine del video, se il video di quel pezzo (o di uno prima)
+    // e' ancora in coda; se no dove vuole
+    function limiteAudio(k) {
+      var v = corsie[0], b = null;
+      if (!((v.agg && v.agg.k <= k) || (v.coda.length && v.coda[0].k <= k))) return Infinity;
+      try { b = v.sb.buffered; } catch (e) {}
+      return (b && b.length ? b.end(b.length - 1) : 0) + 0.5;
     }
     // (ogni updateend di una corsia: un'aggiunta finita, o una pulizia)
     function aggiunto(c) {
@@ -667,6 +729,7 @@ var Pezzi = (function () {
       if (k < 0) c.azzera = true;
       else { c.coda.unshift({ b: b, k: k, fine: fine }); c.byte += b.length; codaByte += b.length; }
       st.quota++;
+      st.ultimaQuota = Date.now();
       var t = punto(), z = intorno(t), davanti = z ? z.z - t : 0;
       if (!quotaDa || video.paused || davanti > 1) quotaDa = Date.now();
       else if (Date.now() - quotaDa > 45000) { errore('quota'); return; }
@@ -731,6 +794,54 @@ var Pezzi = (function () {
       if (x && x.dati > 0) for (var i = 0; i < corsie.length; i++) corsie[i].azzera = true;
       svuota();
     }
+    // la lettura del pezzo riparte (era ferma apposta per la coda piena: quel tempo non e' della rete)
+    function riparti(x) {
+      if (x.tStop) { x.fermo += Date.now() - x.tStop; x.tStop = 0; }
+      x.attende = false;
+      x.d.riprendi();
+    }
+    // un pezzo arrivato tutto: l'attesa del primo byte (Jellyfin che lo prepara) e i MB/s dal primo byte in poi (la rete), senza
+    // il tempo fermo apposta. I MB/s solo dei pezzi da almeno 1 MB: quelli piccoli non dicono niente
+    function misura(x) {
+      var ora = Date.now(), attesa = x.tPrimo ? x.tPrimo - x.t0 : 0, dur = ora - (x.tPrimo || x.t0) - x.fermo;
+      st.misurati++;
+      st.byteSomma += attesa;
+      if (attesa > st.byteMax) st.byteMax = attesa;
+      if (x.dati >= (1 << 20) && dur > 50) {
+        var mbs = x.dati / 1048576 / (dur / 1000);
+        st.mbsSomma += mbs;
+        st.mbsN++;
+        if (!st.mbsMin || mbs < st.mbsMin) st.mbsMin = mbs;
+      }
+    }
+    // i secondi di dati davanti al punto t in una corsia (con due corsie: il video e l'audio, ognuno per se')
+    function fineCorsia(i, t) {
+      var b = null;
+      try { b = corsie[i] && corsie[i].sb ? corsie[i].sb.buffered : null; } catch (e) {}
+      if (!b) return 0;
+      for (var j = 0; j < b.length; j++) if (b.start(j) <= t + 0.05 && b.end(j) > t) return Math.round((b.end(j) - t) * 10) / 10;
+      return 0;
+    }
+    // di quanto l'audio e' spostato rispetto al video dalle liste delle modifiche del segmento iniziale (secondi; 0 senza)
+    function spostaAudio() {
+      var v = null, a = null;
+      for (var i = 0; i < tracce.length; i++) { if (tracce[i].video && !v) v = tracce[i]; else if (tracce[i].audio && !a) a = tracce[i]; }
+      return v && a ? (a.spostata || 0) - (v.spostata || 0) : 0;
+    }
+    // perche' il <video> e' fermo adesso (per il diario dell'app): 'avvio', 'salto' (entro 3 s da un salto), 'tv' (il TV pieno),
+    // 'jellyfin' (il pezzo che serve da piu' di 1 s non ha dato un byte: Jellyfin lo sta ancora preparando), 'rete' (arriva, ma
+    // piano), 'fermo' (nessun pezzo in arrivo ne' in coda: il lettore aspettava), 'altro'. Con quanto avevano davanti video e audio
+    function causa() {
+      var t = punto(), ora = Date.now(), x = inVolo, c = 'altro';
+      if (!initDato) c = 'avvio';
+      else if (ora - st.tSalto < 3000) c = 'salto';
+      else if (quotaFerma) c = 'tv';
+      else if (x && !x.tPrimo && ora - x.t0 > 1000) c = 'jellyfin';
+      else if (x && x.tPrimo) c = 'rete';
+      else if (!x && !inCoda()) c = 'fermo';
+      var v = fineCorsia(0, t);
+      return { causa: c, video: v, audio: corsie.length > 1 ? fineCorsia(1, t) : v };
+    }
     function scarica(k) {
       var p = lista.pezzi[k], x = { k: k, d: null, dati: 0, parti: [], partiN: 0, finito: false, chiuso: false, attende: false, prove: 0, div: null, conf: null };
       inVolo = x;
@@ -753,22 +864,29 @@ var Pezzi = (function () {
         x.attende = false;
         x.div = null;
         x.conf = confini();
+        x.t0 = Date.now();
+        x.tPrimo = 0;
+        x.fermo = 0;
+        x.tStop = 0;
+        x.tempiFatti = false;
         x.d = apri(p.url, {
           blocco: function (b) {
             if (inVolo !== x || fermo) return false;
             st.scaricati += b.length;
             ultimo = Date.now();
             x.dati += b.length;
+            if (!x.tPrimo) x.tPrimo = Date.now();
             x.conf.avanti(b);
             metti(x, b, false);
             // (in coda per il <video>, o ancora qui ad aspettare il segmento iniziale: oltre 8 MB ci si ferma)
-            if (codaByte + x.partiN >= CODA_MAX) { x.attende = true; return false; }
+            if (codaByte + x.partiN >= limiteCoda()) { x.attende = true; x.tStop = Date.now(); return false; }
             return true;
           },
           fine: function () {
             if (inVolo !== x || fermo) return;
             // (finito a meta' di una scatola: Jellyfin che l'ha chiuso prima, la rete. Si rifa')
             if (!x.conf.intero()) { guasto('tagliato'); return; }
+            misura(x);
             inVolo = null;
             if (st.prossimo === k) st.prossimo = k + 1;
             st.secondi += p.durata;
@@ -785,14 +903,20 @@ var Pezzi = (function () {
       if (!b || !b.length) return;
       if (modo.modo === 'insieme') { metticoda(corsie[0], b, x.k); return; }
       if (!x.div) {
-        x.div = divisore(tracce, function (id, byte) {
-          for (var i = 0; i < corsie.length; i++) if (corsie[i].traccia === id) { metticoda(corsie[i], byte, x.k); return; }
+        x.div = divisore(tracce, function (id, byte, t) {
+          for (var i = 0; i < corsie.length; i++) if (corsie[i].traccia === id) { metticoda(corsie[i], byte, x.k, t); return; }
         });
       }
       x.div.avanti(b);
       if (x.div.rotto()) errore('formato', 'pezzo ' + x.k + ' non si divide (' + x.div.rotto() + ')');
     }
-    function metticoda(c, b, k) { c.coda.push({ b: b, k: k, fine: false }); c.byte += b.length; codaByte += b.length; }
+    // (t: dove comincia il frammento di quei byte, nel modo divisi; serve a non far andare l'audio oltre il video)
+    function metticoda(c, b, k, t) {
+      c.coda.push({ b: b, k: k, fine: false, t: t >= 0 ? t : -1 });
+      c.byte += b.length;
+      codaByte += b.length;
+      if (codaByte > st.riservaMax) st.riservaMax = codaByte;
+    }
     // un blocco arrivato (b; fine: il pezzo e' tutto arrivato). I blocchi restano qui (x.parti, senza ricopiarli) finche' non c'e' il
     // segmento iniziale (senza le sue tracce non si sa ne' dividere ne' leggere i tempi: sospeso, si riprende quando arriva) e,
     // dopo un inizio o un salto, finche' non si legge il tempo del primo frammento: se e' lontano da quello della playlist (un
@@ -804,6 +928,13 @@ var Pezzi = (function () {
       if (fine) x.finito = true;
       if (!tracce.length || !corsie.length || (modo.modo === 'divisi' && !corsie[0].traccia)) { sospeso = x; return; }
       if (sospeso === x) sospeso = null;
+      // lo scarto tra il primo tempo dell'audio e quello del video, una volta per pezzo (dal primo blocco, dove c'e' il moof):
+      // normale fino a un pacchetto audio (32 ms dell'AC3); di piu' e' Jellyfin che ha messo l'audio fuori posto
+      if (!x.tempiFatti && x.parti.length && x.parti[0].length >= 4096) {
+        x.tempiFatti = true;
+        var tt = tempiFrammento(x.parti[0], tracce);
+        if (tt.video >= 0 && tt.audio >= 0 && Math.abs(tt.audio - tt.video) > st.scartoMax) st.scartoMax = Math.abs(tt.audio - tt.video);
+      }
       if (controlla && x.parti.length) {
         // (il moof e' all'inizio: bastano i primi byte, senza ricopiare tutto quello che e' arrivato)
         var testa = x.parti[0];
@@ -850,11 +981,16 @@ var Pezzi = (function () {
       // aspetterebbe 20 s di conversione: misurato 2,9 s invece di 7,4 col 4K 15). Il segmento iniziale si chiede appena il
       // pezzo arriva (chiediInit)
       if (!initDato) { if (!primo) { primo = true; scarica(st.prossimo); } return; }
-      // (il pezzo dopo solo quando i blocchi di quello di prima sono tutti nel <video>: se no "davanti" non li conta)
-      if (occupate() || inCoda()) return;
+      // (il pezzo dopo solo quando i blocchi di quello di prima sono tutti nel <video>, se no "davanti" non li conta; tranne col TV
+      // pieno, quando aspettano nella riserva)
+      if (occupate()) return;
+      var n = lista.pezzi.length, t = punto(), z = intorno(t), davanti = z ? z.z - t : 0;
+      // (col TV pieno il pezzo dopo si scarica lo stesso, nella riserva in memoria, finche' c'e' posto: al massimo 32 MB, e in
+      // tutto, TV piu' riserva, al massimo i 40 s davanti di sempre)
+      var riserva = tvPieno() && codaByte + BLOCCO <= RISERVA && (!(peso() > 0) || davanti + codaByte / peso() < avantiS);
+      if (inCoda() && !riserva) return;
       // i pezzi vanno in fila, saltando quelli gia' dentro; dove ripartire dopo un salto lo decide cercato. Il punto qui non sposta
       // la fila: i tempi della playlist non sempre sono quelli dei pezzi (copie non MKV tagliate sui fotogrammi chiave)
-      var n = lista.pezzi.length, t = punto();
       while (st.prossimo < n && fatto(st.prossimo)) st.prossimo++;
       if (st.prossimo >= n) {
         // tutto dentro fino alla fine: il <video> deve saperlo (se no aspetta altri dati e non arriva mai a "ended"). Basta l'ultimo
@@ -866,17 +1002,18 @@ var Pezzi = (function () {
         }
         return;
       }
-      var z = intorno(t), davanti = z ? z.z - t : 0;
-      if (davanti >= AVANTI_S) return;
+      if (davanti >= avantiS) return;
       // (il pezzo dopo appena c'e' posto per un blocco: i suoi blocchi entrano man mano che il film consuma)
-      if (davanti > 2 && davanti * peso() + BLOCCO > st.maxByte) return;
+      if (davanti > 2 && davanti * peso() + BLOCCO > st.maxByte && !riserva) return;
       scarica(st.prossimo);
     }
     // un salto: se il punto e' gia' dentro si continua da dove mancano i pezzi; se no via quello che si stava scaricando (a meno
     // che sia proprio il pezzo che serve) e si riparte dal pezzo che contiene il punto
     function cercato() {
       if (fermo || !lista) return;
-      st.salti++;
+      // (il salto sul punto stesso fatto da qui per risincronizzare non conta: non e' di chi guarda)
+      if (interno) interno = false;
+      else { st.salti++; st.tSalto = Date.now(); }
       var t = video.currentTime, k = indice(t);
       // (prima del segmento iniziale: si cambia solo il primo pezzo, se il punto e' in un altro)
       if (!initDato) {
@@ -887,7 +1024,8 @@ var Pezzi = (function () {
       }
       if (intorno(t)) {
         var m = k, n = lista.pezzi.length;
-        while (m < n && fatto(m)) m++;
+        // (anche i pezzi gia' arrivati e in attesa nella riserva: un salto dentro i dati non li butta)
+        while (m < n && (fatto(m) || accodato(m))) m++;
         if (inVolo && inVolo.k !== m) interrompi();
         st.prossimo = m;
       } else {
@@ -916,7 +1054,8 @@ var Pezzi = (function () {
       ultimaVeglia = ora;
       if (fermo || !initDato) return;
       giri++;
-      var t = punto();
+      var t = punto(), zz = intorno(t);
+      if (zz && zz.z - t > st.davantiMax) st.davantiMax = zz.z - t;
       if (giunto && (video.seeking || (!video.paused && video.readyState < 3))) {
         var z = intorno(t), g = z ? z.z : t, s = -1;
         if (!z) s = inizioDopo(t);
@@ -929,6 +1068,28 @@ var Pezzi = (function () {
       }
       if (giri % 6 === 0) pulisci();
       pompa();
+    }
+
+    // una fermata vera del film (non un salto, non prima che parta): da quando, e se l'audio aveva piu' dati del video
+    function inAttesa() {
+      if (fermo || !partito || video.seeking || tFermo) return;
+      tFermo = Date.now();
+      var c = causa();
+      avantiAudio = c.audio - c.video > 0.5;
+    }
+    // il film riparte dopo una fermata: nel modo divisi (video e audio in due flussi, come li vuole il Q80B col Dolby) il TV puo'
+    // ripartire con l'audio fuori tempo. Dopo una fermata di almeno 1 s, o con l'audio che aveva piu' dati, un salto sul punto
+    // stesso rimette insieme i due flussi (come dopo un salto vero). Non dopo un salto di chi guarda: li' ripartono gia' insieme
+    function ripartito() {
+      if (!partito) { partito = true; return; }
+      var lungo = tFermo && Date.now() - tFermo >= 1000, a = avantiAudio;
+      tFermo = 0;
+      avantiAudio = false;
+      if (fermo || !modo || modo.modo !== 'divisi' || !(lungo || a) || Date.now() - st.tSalto < 3000 || video.seeking) return;
+      st.risinc++;
+      log('pezzi: risincronizzo audio e video a ' + Math.round(video.currentTime) + ' s');
+      interno = true;
+      try { video.currentTime = video.currentTime; } catch (e) { interno = false; }
     }
 
     // il <video> e la playlist sono pronti tutti e due: un posto per corsia, poi il primo pezzo e il segmento iniziale
@@ -994,7 +1155,7 @@ var Pezzi = (function () {
       var x = sospeso;
       if (!x || fermo) return;
       metti(x, null, false);
-      if (inVolo === x && x.attende && codaByte + x.partiN < CODA_MAX / 2) { x.attende = false; x.d.riprendi(); }
+      if (inVolo === x && x.attende && codaByte + x.partiN < limiteCoda() / 2) riparti(x);
     }
     function avvia() {
       domande.push(tutto(url0, MAX_LISTA, function (b, stato) {
@@ -1015,6 +1176,8 @@ var Pezzi = (function () {
       clearInterval(timer);
       clearTimeout(quotaTimer);
       video.removeEventListener('seeking', cercato);
+      video.removeEventListener('waiting', inAttesa);
+      video.removeEventListener('playing', ripartito);
       video.removeEventListener('loadedmetadata', alPunto);
       domande.forEach(function (d) { d.chiudi(); });
       domande = [];
@@ -1048,6 +1211,8 @@ var Pezzi = (function () {
     ms.addEventListener('sourceclose', function () { if (!fermo && corsie.length) { log('pezzi: sorgente chiusa'); ferma(); } });
     video.addEventListener('loadedmetadata', alPunto);
     video.addEventListener('seeking', cercato);
+    video.addEventListener('waiting', inAttesa);
+    video.addEventListener('playing', ripartito);
     timer = setInterval(veglia, 500);
     video.src = oggetto;
     pronto = true;
@@ -1059,12 +1224,21 @@ var Pezzi = (function () {
         return { pronto: pronto, modo: st.modo, pezzi: st.pezzi, prossimo: st.prossimo, scaricatiMB: Math.round(st.scaricati / 104857.6) / 10, quota: st.quota,
           riprove: st.riprove, buchi: st.buchi, salti: st.salti, offset: st.offset, maxMB: Math.round(st.maxByte / 1048576),
           davanti: z ? Math.round((z.z - t) * 10) / 10 : 0, codaMB: Math.round(codaByte / 104857.6) / 10, tipo: st.tipo, errore: st.errore,
-          fine: st.fine, fermoDa: Date.now() - ultimo, ritardo: st.ritardo };
-      }
+          fine: st.fine, fermoDa: Date.now() - ultimo, ritardo: st.ritardo,
+          // (per il diario: pezzi misurati, attesa del primo byte media e massima in ms, MB/s minimi e medi, scarto audio-video e
+          // spostamento dell'audio voluto dal segmento iniziale in ms, il massimo di secondi davanti)
+          misurati: st.misurati, msByte: st.misurati ? Math.round(st.byteSomma / st.misurati) : 0, msByteMax: st.byteMax,
+          mbsMin: Math.round(st.mbsMin * 10) / 10, mbs: st.mbsN ? Math.round(st.mbsSomma / st.mbsN * 10) / 10 : 0,
+          scarto: Math.round(st.scartoMax * 1000), spostaAudio: Math.round(spostaAudio() * 1000), davantiMax: Math.round(st.davantiMax * 10) / 10,
+          risinc: st.risinc, riservaMB: Math.round(st.riservaMax / 104857.6) / 10 };
+      },
+      causa: causa,
+      // il salto in corso l'ha fatto il lettore (risincronizzazione): chi guarda non ha chiesto niente
+      interno: function () { return interno; }
     };
   }
 
   return { crea: crea, possibile: possibile,
-    _interni: { leggiMaster: leggiMaster, leggiLista: leggiLista, leggiInit: leggiInit, tempoFrammento: tempoFrammento, attributi: attributi, modoMse: modoMse,
-      dividiMoof: dividiMoof, divisore: divisore, senzaDolbyVision: senzaDolbyVision, confini: confini } };
+    _interni: { leggiMaster: leggiMaster, leggiLista: leggiLista, leggiInit: leggiInit, tempoFrammento: tempoFrammento, tempiFrammento: tempiFrammento,
+      attributi: attributi, modoMse: modoMse, dividiMoof: dividiMoof, divisore: divisore, senzaDolbyVision: senzaDolbyVision, confini: confini } };
 })();
