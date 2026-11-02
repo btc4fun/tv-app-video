@@ -3866,11 +3866,28 @@
   // (il salto sul punto stesso che fa il lettore a pezzi per risincronizzare audio e video non e' un salto di chi guarda)
   v.addEventListener('seeking', function () {
     if (!L) return;
-    var d = diarioDi(L);
+    var d = diarioDi(L), interno = pz && pz.interno();
     // (un salto di chi guarda, col film che va: da qui si conta quanto ci mette a ripartire)
-    if (!(pz && pz.interno())) { d.salti++; d.tSalto = v.paused ? 0 : Date.now(); }
+    if (!interno) { d.salti++; d.tSalto = v.paused ? 0 : Date.now(); }
     d.mt = -1;
+    if (!interno) vegliaSalto(L);
   });
+  // dal Mac, a pezzi: un salto che dopo 15 s non e' ancora arrivato (Jellyfin che non prepara il punto nuovo, una domanda persa
+  // per strada) riparte da solo dallo stesso punto, come un film fermo (richiesta del 2/11: un salto al minuto 47 restava a
+  // caricare, e le guardie dei film fermi un salto non lo guardano). Il tempo conta solo col film che deve andare: non in pausa,
+  // non a schermo spento, non durante una ricarica. Solo a film partito: la partenza ha la sua guardia (macAvvio)
+  function vegliaSalto(x) {
+    if (!DAL_MAC || !aPezzi(x) || !x.partito) return;
+    clearTimeout(x.saltoTimer);
+    var da = Date.now();
+    x.saltoTimer = setTimeout(function guarda() {
+      if (L !== x || x.uscito || !v.seeking) return;
+      var ora = Date.now();
+      if (x.ricarica || x.pausaVoluta || v.paused || document.hidden) da = ora;
+      else if (ora - da >= 15000) { logPezzi('salto fermo da 15 s: riparto dallo stesso punto'); nonParte(x, ''); return; }
+      x.saltoTimer = setTimeout(guarda, 2000);
+    }, 2000);
+  }
   // il film riparte dopo un salto: subito (i dati c'erano) o quando arrivano. Nel diario il tempo massimo e quello medio
   function ripartitoDopoSalto() {
     var d = L && L.diario;
